@@ -1,26 +1,41 @@
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import os
+import asyncio
 
-# Load movie list with qualities
-with open("movies.json", "r") as file:
-    MOVIES = json.load(file)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+from fastapi import FastAPI, Request
+import telegram
+
+# Load movies
+with open("movies.json", "r") as f:
+    MOVIES = json.load(f)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set")
 
-# /start command — show movie list
+# Telegram bot app
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# FastAPI app for webhook
+fastapi_app = FastAPI()
+
+
+# Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in MOVIES.keys()
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=reply_markup)
+    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# /search command — search movie titles
+
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("❗️ Please provide a search query. Example: /search inception")
@@ -37,10 +52,9 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in results.keys()
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=reply_markup)
+    await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# Handle button taps
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -55,12 +69,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton(q, callback_data=f"quality|{movie_title}|{q}")]
                 for q in movie_data.keys()
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.reply_text(f"🎥 Choose quality for *{movie_title}*:", parse_mode="Markdown", reply_markup=reply_markup)
+            await query.message.reply_text(
+                f"🎥 Choose quality for *{movie_title}*:",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         else:
             await query.message.reply_text(
                 f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
-                parse_mode='Markdown'
+                parse_mode="Markdown"
             )
 
     elif data.startswith("quality|"):
@@ -76,10 +93,34 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.message.reply_text("❌ Link not found for this quality.")
 
-# Run bot
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("search", search))
-    app.add_handler(CallbackQueryHandler(button))
-    app.run_polling()
+
+# Add handlers
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("search", search))
+app.add_handler(CallbackQueryHandler(button))
+
+
+# FastAPI route to handle webhook
+@fastapi_app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, app.bot)
+    await app.process_update(update)
+    return {"ok": True}
+
+
+# Set the webhook when the bot starts
+async def set_webhook():
+    url = "https://YOUR_RENDER_DOMAIN/webhook"  # Replace with your actual Render domain
+    await app.bot.set_webhook(url)
+
+
+# Start everything
+if __name__ == "__main__":
+    async def main():
+        await app.initialize()
+        await app.start()
+        await set_webhook()
+        await asyncio.Event().wait()
+
+    asyncio.run(main())
