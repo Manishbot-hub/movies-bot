@@ -64,19 +64,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 )
 
 
-    elif data.startswith("quality|"):
-        _, movie_title, quality = data.split("|")
-        movie_links = MOVIES.get(movie_title, {})
-        link = movie_links.get(quality)
+ elif data.startswith("quality|"):
+    _, movie_title, quality = data.split("|")
+    movie_links = MOVIES.get(movie_title, {})
+    link = movie_links.get(quality)
 
-        if link:
-            await query.message.reply_text(
-                f"🎬 {movie_title} ({quality})
-📥 [Download here]({link})",
-                parse_mode='Markdown'
-            )
-        else:
-            await query.message.reply_text("❌ Link not found for this quality.")
+    if link:
+        await query.message.reply_text(
+            f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
+            parse_mode='Markdown'
+        )
+    else:
+        await query.message.reply_text("❌ Link not found for this quality.")
+
 
 # Run bot
 if __name__ == '__main__':
