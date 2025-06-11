@@ -113,6 +113,9 @@ async def webhook(request: Request):
 async def on_startup():
     webhook_url = "https://movies-bot-ydtm.onrender.com/webhook"  # Update this with your Render domain
     await app.bot.set_webhook(webhook_url)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:fastapi_app", host="0.0.0.0", port=10000)
 
 
 
