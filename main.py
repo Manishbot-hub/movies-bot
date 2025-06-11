@@ -8,7 +8,7 @@ with open("movies.json", "r") as file:
     MOVIES = json.load(file)
 
 BOT_TOKEN = os.getenv("7236698980:AAEGZ-2MNv-jzG0tQch5EbnVoe6ESacFKLg")
-if not BOT_TOKEN:
+if not BOT_TOKEN:7236698980:AAEGZ-2MNv-jzG0tQch5EbnVoe6ESacFKLg
     raise ValueError("BOT_TOKEN is not set")
 
 # /start command - show all movies
