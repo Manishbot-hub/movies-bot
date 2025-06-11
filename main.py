@@ -115,7 +115,10 @@ async def on_startup():
     await app.bot.set_webhook(webhook_url)
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:fastapi_app", host="0.0.0.0", port=10000)
+    import os
+    port = int(os.environ.get("PORT", 10000))  # Use Render's port or default to 10000
+    uvicorn.run("main:fastapi_app", host="0.0.0.0", port=port)
+
 
 
 
