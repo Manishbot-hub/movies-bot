@@ -7,10 +7,11 @@ import os
 with open("movies.json", "r") as file:
     MOVIES = json.load(file)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("7236698980:AAEGZ-2MNv-jzG0tQch5EbnVoe6ESacFKLg")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set")
 
+# /start command - show all movies
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=title)] for title in MOVIES.keys()
@@ -18,6 +19,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=reply_markup)
 
+# /search command - find matching movies
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❗️ Please provide a search query. Example: /search inception")
+        return
+
+    query = ' '.join(context.args).lower()
+    results = {title: link for title, link in MOVIES.items() if query in title.lower()}
+
+    if not results:
+        await update.message.reply_text("🔍 No movies found matching your query.")
+        return
+
+    keyboard = [
+        [InlineKeyboardButton(title, callback_data=title)] for title in results.keys()
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(f"🔍 Search results for \"{query}\":", reply_markup=reply_markup)
+
+# Button click handler
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -28,8 +49,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+# Run bot
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("search", search))
     app.add_handler(CallbackQueryHandler(button))
     app.run_polling()
