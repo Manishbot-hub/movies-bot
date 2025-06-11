@@ -111,7 +111,8 @@ async def webhook(request: Request):
 
 # Set the webhook when the bot starts
 async def set_webhook():
-    url = "https://YOUR_RENDER_DOMAIN/webhook"  # Replace with your actual Render domain
+    url = "url = "https://movies-bot-ydtm.onrender.com/webhook"
+"  # Replace with your actual Render domain
     await app.bot.set_webhook(url)
 
 
