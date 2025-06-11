@@ -26,7 +26,6 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 # FastAPI app for webhook
 fastapi_app = FastAPI()
 
-
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -34,7 +33,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for title in MOVIES.keys()
     ]
     await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
-
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -53,7 +51,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for title in results.keys()
     ]
     await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=InlineKeyboardMarkup(keyboard))
-
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -93,12 +90,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.message.reply_text("❌ Link not found for this quality.")
 
-
 # Add handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("search", search))
 app.add_handler(CallbackQueryHandler(button))
-
 
 # FastAPI route to handle webhook
 @fastapi_app.post("/webhook")
@@ -108,13 +103,10 @@ async def webhook(request: Request):
     await app.process_update(update)
     return {"ok": True}
 
-
 # Set the webhook when the bot starts
 async def set_webhook():
-   url = "https://movies-bot-ydtm.onrender.com/webhook"
-  # Replace with your actual Render domain
+    url = "https://movies-bot-ydtm.onrender.com/webhook"
     await app.bot.set_webhook(url)
-
 
 # Start everything
 if __name__ == "__main__":
@@ -125,3 +117,4 @@ if __name__ == "__main__":
         await asyncio.Event().wait()
 
     asyncio.run(main())
+
