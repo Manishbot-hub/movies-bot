@@ -1,6 +1,10 @@
 {
-  "Inception (2010)": "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID_1",
-  "Interstellar (2014)": "https://www.dropbox.com/s/abcd1234/interstellar.mp4?dl=1",
-  "The Matrix (1999)": "https://yourdomain.com/movies/matrix.mp4",
-  "The Great Dictator (1940)": "https://archive.org/download/GreatDictator/GreatDictator.mp4"
+  "Inception (2010)": {
+    "480p": "https://example.com/inception-480p.mp4",
+    "720p": "https://example.com/inception-720p.mp4",
+    "1080p": "https://example.com/inception-1080p.mp4"
+  },
+  "The Matrix (1999)": {
+    "720p": "https://example.com/matrix-720p.mp4"
+  }
 }
