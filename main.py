@@ -101,13 +101,18 @@ app.add_handler(CommandHandler("search", search))
 app.add_handler(CallbackQueryHandler(button))
 
 
-# FastAPI webhook route
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, app.bot)
-    await app.process_update(update)
-    return {"ok": True}
+    try:
+        data = await request.json()
+        update = Update.de_json(data, app.bot)
+        await app.process_update(update)
+        print("✅ Processed update:", data)  # ✅ Success log
+        return {"ok": True}
+    except Exception as e:
+        print("❌ Error processing update:", e)  # ❌ Error log
+        return {"ok": False}
+
 
 
 # Set webhook when FastAPI starts
