@@ -38,7 +38,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for title in results.keys()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(f"🔍 Search results for "{query}":", reply_markup=reply_markup)
+    await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=reply_markup)
 
 # Handle button taps
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -58,25 +58,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.message.reply_text(f"🎥 Choose quality for *{movie_title}*:", parse_mode="Markdown", reply_markup=reply_markup)
         else:
-    await query.message.reply_text(
-    f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
-    parse_mode='Markdown'
-)
+            await query.message.reply_text(
+                f"🎬 {movie_title}
+📥 [Download here]({movie_data})",
+                parse_mode='Markdown'
+            )
 
+    elif data.startswith("quality|"):
+        _, movie_title, quality = data.split("|")
+        movie_links = MOVIES.get(movie_title, {})
+        link = movie_links.get(quality)
 
- elif data.startswith("quality|"):
-    _, movie_title, quality = data.split("|")
-    movie_links = MOVIES.get(movie_title, {})
-    link = movie_links.get(quality)
-
-    if link:
-        await query.message.reply_text(
-            f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
-            parse_mode='Markdown'
-        )
-    else:
-        await query.message.reply_text("❌ Link not found for this quality.")
-
+        if link:
+            await query.message.reply_text(
+                f"🎬 {movie_title} ({quality})
+📥 [Download here]({link})",
+                parse_mode='Markdown'
+            )
+        else:
+            await query.message.reply_text("❌ Link not found for this quality.")
 
 # Run bot
 if __name__ == '__main__':
