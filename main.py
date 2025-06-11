@@ -10,7 +10,6 @@ from telegram.ext import (
     ContextTypes,
 )
 from fastapi import FastAPI, Request
-import telegram
 
 # Load movies
 with open("movies.json", "r") as f:
@@ -20,11 +19,12 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set")
 
-# Telegram bot app
+# Telegram bot application
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# FastAPI app for webhook
+# FastAPI app
 fastapi_app = FastAPI()
+
 
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -33,6 +33,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for title in MOVIES.keys()
     ]
     await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
+
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -51,6 +52,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for title in results.keys()
     ]
     await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=InlineKeyboardMarkup(keyboard))
+
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -90,12 +92,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.message.reply_text("❌ Link not found for this quality.")
 
-# Add handlers
+
+# Register handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("search", search))
 app.add_handler(CallbackQueryHandler(button))
 
-# FastAPI route to handle webhook
+
+# FastAPI webhook route
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
@@ -103,18 +107,12 @@ async def webhook(request: Request):
     await app.process_update(update)
     return {"ok": True}
 
-# Set the webhook when the bot starts
-async def set_webhook():
-    url = "https://movies-bot-ydtm.onrender.com/webhook"
-    await app.bot.set_webhook(url)
 
-# Start everything
-if __name__ == "__main__":
-    async def main():
-        await app.initialize()
-        await app.start()
-        await set_webhook()
-        await asyncio.Event().wait()
+# Set webhook on FastAPI startup
+@fastapi_app.on_event("startup")
+async def on_startup():
+    webhook_url = "https://movies-bot-ydtm.onrender.com/webhook"  # Update this with your Render domain
+    await app.bot.set_webhook(webhook_url)
 
-    asyncio.run(main())
+
 
