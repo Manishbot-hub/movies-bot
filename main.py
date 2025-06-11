@@ -59,8 +59,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(f"🎥 Choose quality for *{movie_title}*:", parse_mode="Markdown", reply_markup=reply_markup)
         else:
             await query.message.reply_text(
-                f"🎬 {movie_title}
-📥 [Download here]({movie_data})",
+                f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
                 parse_mode='Markdown'
             )
 
@@ -71,8 +70,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if link:
             await query.message.reply_text(
-                f"🎬 {movie_title} ({quality})
-📥 [Download here]({link})",
+                f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
                 parse_mode='Markdown'
             )
         else:
