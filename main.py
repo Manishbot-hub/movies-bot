@@ -55,4 +55,13 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("search", search))
     app.add_handler(CallbackQueryHandler(button))
-    app.run_polling()
+    import asyncio
+
+async def main():
+    await app.initialize()
+    await app.start()
+    await app.bot.set_webhook("https://your-render-url.onrender.com/")  # replace with your actual URL
+    await asyncio.Event().wait()
+
+asyncio.run(main())
+
