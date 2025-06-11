@@ -58,11 +58,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.message.reply_text(f"🎥 Choose quality for *{movie_title}*:", parse_mode="Markdown", reply_markup=reply_markup)
         else:
-            await query.message.reply_text(
-                f"🎬 {movie_title}
-📥 [Download here]({movie_data})",
-                parse_mode='Markdown'
-            )
+    await query.message.reply_text(
+    f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
+    parse_mode='Markdown'
+)
+
 
     elif data.startswith("quality|"):
         _, movie_title, quality = data.split("|")
