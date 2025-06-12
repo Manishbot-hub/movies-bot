@@ -1,4 +1,3 @@
-
 import json
 import os
 import asyncio
@@ -55,7 +54,6 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if suggestions:
             suggestion_text = "\n".join(f"🔸 {s}" for s in suggestions)
             await update.message.reply_text(f"❌ No exact matches, but you might like:\n{suggestion_text}")
-
         else:
             await update.message.reply_text("🔍 No matching movies found.")
         return
@@ -69,7 +67,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Button interaction
+# Callback for movie selection
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -145,7 +143,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /removemovie command
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id != ADMIN_ID:6301044201
+    if user_id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to remove movies.")
         return
 
@@ -173,7 +171,7 @@ app.add_handler(CommandHandler("addmovie", add_movie))
 app.add_handler(CommandHandler("removemovie", remove_movie))
 app.add_handler(CallbackQueryHandler(button))
 
-# Webhook
+# Webhook route
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
@@ -188,7 +186,7 @@ async def webhook(request: Request):
         print("❌ Error processing update:", e)
         return {"ok": False}
 
-# On startup
+# Webhook setup
 @fastapi_app.on_event("startup")
 async def on_startup():
     try:
@@ -204,3 +202,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:fastapi_app", host="0.0.0.0", port=port)
+
