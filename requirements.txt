@@ -1,9 +1,4 @@
- HEAD
-python-telegram-bot==20.7
+python-telegram-bot>=20.0,<21.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
 
-python-telegram-bot==20.0
-fastapi
-uvicorn
-
-
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
