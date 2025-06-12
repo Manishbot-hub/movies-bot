@@ -114,8 +114,14 @@ async def webhook(request: Request):
 # Set webhook on startup
 @fastapi_app.on_event("startup")
 async def on_startup():
-    webhook_url = "https://movies-bot-ydtm.onrender.com/webhook"
-    await app.bot.set_webhook(webhook_url)
+    try:
+        webhook_url = "https://movies-bot-ydtm.onrender.com/webhook"
+        print(f"🌐 Setting webhook to: {webhook_url}")
+        await app.bot.set_webhook(webhook_url)
+        print("✅ Webhook set successfully")
+    except Exception as e:
+        print("❌ Error in on_startup:", e)
+
 
 # Run with uvicorn on Render
 if __name__ == "__main__":
