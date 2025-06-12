@@ -112,7 +112,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /addmovie command
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id != ADMIN_ID:6301044201
+    if user_id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to add movies.")
         return
 
