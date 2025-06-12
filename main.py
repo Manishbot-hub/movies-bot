@@ -54,8 +54,8 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         suggestions = [title for title in MOVIES if any(q in title.lower() for q in query.split())]
         if suggestions:
             suggestion_text = "\n".join(f"🔸 {s}" for s in suggestions)
-            await update.message.reply_text(f"❌ No exact matches, but you might like:
-{suggestion_text}")
+            await update.message.reply_text(f"❌ No exact matches, but you might like:\n{suggestion_text}")
+
         else:
             await update.message.reply_text("🔍 No matching movies found.")
         return
@@ -112,7 +112,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /addmovie command
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if user_id != ADMIN_ID:6301044201
         await update.message.reply_text("❌ You are not authorized to add movies.")
         return
 
@@ -145,7 +145,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /removemovie command
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if user_id != ADMIN_ID:6301044201
         await update.message.reply_text("❌ You are not authorized to remove movies.")
         return
 
