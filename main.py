@@ -120,7 +120,7 @@ async def webhook(request: Request):
 @fastapi_app.on_event("startup")
 async def on_startup():
     try:
-        webhook_url = "https://movies-bot-ydtm.onrender.com/webhook"
+        webhook_url = "https://movies-bot-1-uukn.onrender.com/webhook"
         print(f"🌐 Setting webhook to: {webhook_url}")
         await app.bot.set_webhook(webhook_url)
         print("✅ Webhook set successfully")
