@@ -106,14 +106,19 @@ app.add_handler(CallbackQueryHandler(button))
 async def webhook(request: Request):
     try:
         data = await request.json()
-        print("📥 Raw data from Telegram:", data)  # ✅ Add this line
+        print("📥 Telegram data:", data)
         update = Update.de_json(data, app.bot)
+
+        # ✅ Add this line
+        await app.initialize()
+
         await app.process_update(update)
-        print("✅ Webhook received and processed.")
+        print("✅ Webhook processed.")
         return {"ok": True}
     except Exception as e:
-        print("❌ Error processing update:", e)  # ✅ This line shows the crash
+        print("❌ Error processing update:", e)
         return {"ok": False}
+
 
 
 # Set webhook on startup
