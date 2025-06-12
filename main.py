@@ -23,7 +23,6 @@ from fastapi import FastAPI, Request
 # Load movies
 with open("movies.json", "r") as f:
     MOVIES = json.load(f)
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -40,7 +39,7 @@ fastapi_app = FastAPI()
 
 
 # Handlers
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
@@ -77,7 +76,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = {t: links for t, links in MOVIES.items() if query in t.lower()}
     if not results:
         await update.message.reply_text("🔍 No matching movies found.")
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ 
         return
 
     keyboard = [
@@ -98,7 +97,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -136,7 +135,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(
                 f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
                 parse_mode="Markdown"
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ 
             )
 
     elif data.startswith("quality|"):
@@ -154,7 +153,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if link:
             await query.message.reply_text(
                 f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ 
                 parse_mode='Markdown'
             )
         else:
@@ -202,4 +201,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:fastapi_app", host="0.0.0.0", port=port)
- b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ 
