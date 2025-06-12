@@ -76,19 +76,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             else:
- await query.message.reply_text(
-    f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
-    parse_mode='Markdown'
-)
-
+                await query.message.reply_text(
+                    f"🎬 {movie_title}
+📥 [Download here]({movie_data})",
+                    parse_mode='Markdown'
+                )
 
         elif data.startswith("quality|"):
             _, movie_title, quality = data.split("|")
             link = MOVIES.get(movie_title, {}).get(quality)
             if link:
                 await query.message.reply_text(
-                    f"🎬 {movie_title} ({quality})
-📥 [Download here]({link})",
+                    f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
                     parse_mode='Markdown'
                 )
             else:
@@ -105,8 +104,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if len(args) < 3:
-            await update.message.reply_text("⚠️ Usage:
-`/addmovie Title Quality Link`", parse_mode="Markdown")
+            await update.message.reply_text("⚠️ Usage:\n`/addmovie Title Quality Link`", parse_mode="Markdown")
             return
 
         title = args[0]
