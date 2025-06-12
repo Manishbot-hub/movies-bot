@@ -1,5 +1,5 @@
 import json
-<<<<<<< HEAD
+ 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 import os
@@ -7,7 +7,7 @@ import os
 # Load movie list with qualities
 with open("movies.json", "r") as file:
     MOVIES = json.load(file)
-=======
+
 import os
 import asyncio
 
@@ -23,15 +23,15 @@ from fastapi import FastAPI, Request
 # Load movies
 with open("movies.json", "r") as f:
     MOVIES = json.load(f)
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set")
 
-<<<<<<< HEAD
+ 
 # /start command — show movie list
-=======
+
 # Telegram bot application
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -40,13 +40,13 @@ fastapi_app = FastAPI()
 
 
 # Handlers
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in MOVIES.keys()
     ]
-<<<<<<< HEAD
+ 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=reply_markup)
 
@@ -61,7 +61,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not results:
         await update.message.reply_text("🔍 No movies found matching your query.")
-=======
+
     await update.message.reply_text(
         "🎬 Choose a movie to download:",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -77,19 +77,19 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = {t: links for t, links in MOVIES.items() if query in t.lower()}
     if not results:
         await update.message.reply_text("🔍 No matching movies found.")
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
         return
 
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
-<<<<<<< HEAD
+ 
         for title in results.keys()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=reply_markup)
 
 # Handle button taps
-=======
+
         for title in results
     ]
     await update.message.reply_text(
@@ -98,7 +98,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -107,7 +107,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("movie|"):
         movie_title = data.split("|")[1]
         movie_data = MOVIES.get(movie_title)
-<<<<<<< HEAD
+ 
 
         if isinstance(movie_data, dict):
             keyboard = [
@@ -121,7 +121,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🎬 {movie_title}
 📥 [Download here]({movie_data})",
                 parse_mode='Markdown'
-=======
+
         if isinstance(movie_data, dict):
             keyboard = [
                 [InlineKeyboardButton(q, callback_data=f"quality|{movie_title}|{q}")]
@@ -136,12 +136,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(
                 f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
                 parse_mode="Markdown"
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
             )
 
     elif data.startswith("quality|"):
         _, movie_title, quality = data.split("|")
-<<<<<<< HEAD
+ 
         movie_links = MOVIES.get(movie_title, {})
         link = movie_links.get(quality)
 
@@ -149,18 +149,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(
                 f"🎬 {movie_title} ({quality})
 📥 [Download here]({link})",
-=======
+
         link = MOVIES.get(movie_title, {}).get(quality)
         if link:
             await query.message.reply_text(
                 f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
                 parse_mode='Markdown'
             )
         else:
             await query.message.reply_text("❌ Link not found for this quality.")
 
-<<<<<<< HEAD
+ 
 # Run bot
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("search", search))
     app.add_handler(CallbackQueryHandler(button))
     app.run_polling()
-=======
+
 
 # Register handlers
 app.add_handler(CommandHandler("start", start))
@@ -202,4 +202,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("main:fastapi_app", host="0.0.0.0", port=port)
->>>>>>> b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
+ b3fd2864a41c3e5ea533293e5d4f866f25daf6f8
