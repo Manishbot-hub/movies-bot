@@ -106,13 +106,15 @@ app.add_handler(CallbackQueryHandler(button))
 async def webhook(request: Request):
     try:
         data = await request.json()
+        print("📥 Raw data from Telegram:", data)  # ✅ Add this line
         update = Update.de_json(data, app.bot)
         await app.process_update(update)
         print("✅ Webhook received and processed.")
         return {"ok": True}
     except Exception as e:
-        print("❌ Error processing update:", e)
+        print("❌ Error processing update:", e)  # ✅ This line shows the crash
         return {"ok": False}
+
 
 # Set webhook on startup
 @fastapi_app.on_event("startup")
