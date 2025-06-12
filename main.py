@@ -51,7 +51,13 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = {title: links for title, links in MOVIES.items() if query in title.lower()}
 
     if not results:
-        await update.message.reply_text("🔍 No matching movies found.")
+        suggestions = [title for title in MOVIES if any(q in title.lower() for q in query.split())]
+        if suggestions:
+            suggestion_text = "\n".join(f"🔸 {s}" for s in suggestions)
+            await update.message.reply_text(f"❌ No exact matches, but you might like:
+{suggestion_text}")
+        else:
+            await update.message.reply_text("🔍 No matching movies found.")
         return
 
     keyboard = [
@@ -63,7 +69,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Callback for movie selection
+# Button interaction
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -103,7 +109,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("❌ Error in button handler:", e)
 
-# /addmovie command for admin
+# /addmovie command
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
@@ -113,7 +119,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if len(args) < 3:
-            await update.message.reply_text("⚠️ Usage:\n`/addmovie Title Quality Link`", parse_mode="Markdown")
+            await update.message.reply_text("⚠️ Usage:\n/addmovie Title Quality Link", parse_mode="Markdown")
             return
 
         title = args[0]
@@ -136,13 +142,38 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("❌ Error adding movie:", e)
         await update.message.reply_text("❌ Failed to add movie.")
 
+# /removemovie command
+async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized to remove movies.")
+        return
+
+    try:
+        if not context.args:
+            await update.message.reply_text("⚠️ Usage:\n/removemovie MovieName", parse_mode="Markdown")
+            return
+
+        title = ' '.join(context.args)
+        if title in MOVIES:
+            del MOVIES[title]
+            with open(MOVIES_FILE, "w") as f:
+                json.dump(MOVIES, f, indent=2)
+            await update.message.reply_text(f"🗑️ Movie *{title}* removed successfully!", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("❌ Movie not found.")
+    except Exception as e:
+        print("❌ Error removing movie:", e)
+        await update.message.reply_text("❌ Failed to remove movie.")
+
 # Register handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("search", search))
 app.add_handler(CommandHandler("addmovie", add_movie))
+app.add_handler(CommandHandler("removemovie", remove_movie))
 app.add_handler(CallbackQueryHandler(button))
 
-# Webhook route
+# Webhook
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
@@ -157,7 +188,7 @@ async def webhook(request: Request):
         print("❌ Error processing update:", e)
         return {"ok": False}
 
-# Webhook setup on startup
+# On startup
 @fastapi_app.on_event("startup")
 async def on_startup():
     try:
