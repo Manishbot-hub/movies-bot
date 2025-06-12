@@ -25,28 +25,17 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 # FastAPI app
 fastapi_app = FastAPI()
 
-@fastapi_app.post("/webhook")
-async def webhook(request: Request):
-    try:
-        data = await request.json()
-        update = Update.de_json(data, app.bot)
-        await app.process_update(update)
-        print("✅ Webhook received and processed.")
-        return {"ok": True}
-    except Exception as e:
-        print("❌ Error processing update:", e)
-        return {"ok": False}
-
-# Start command
+# Telegram commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in MOVIES.keys()
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "🎬 Choose a movie to download:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-# Search command
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("❗️ Please provide a search query.")
@@ -68,56 +57,58 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Button handler
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
 
-    if data.startswith("movie|"):
-        movie_title = data.split("|")[1]
-        movie_data = MOVIES.get(movie_title)
+    try:
+        if data.startswith("movie|"):
+            movie_title = data.split("|")[1]
+            movie_data = MOVIES.get(movie_title)
 
-        if isinstance(movie_data, dict):
-            keyboard = [
-                [InlineKeyboardButton(q, callback_data=f"quality|{movie_title}|{q}")]
-                for q in movie_data
-            ]
-            await query.message.reply_text(
-                f"🎥 Choose quality for *{movie_title}*:",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        else:
-            await query.message.reply_text(
-                f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
-                parse_mode='Markdown'
-            )
+            if isinstance(movie_data, dict):
+                keyboard = [
+                    [InlineKeyboardButton(q, callback_data=f"quality|{movie_title}|{q}")]
+                    for q in movie_data
+                ]
+                await query.message.reply_text(
+                    f"🎥 Choose quality for *{movie_title}*:",
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                await query.message.reply_text(
+                    f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
+                    parse_mode='Markdown'
+                )
 
-    elif data.startswith("quality|"):
-        _, movie_title, quality = data.split("|")
-        link = MOVIES.get(movie_title, {}).get(quality)
-        if link:
-            await query.message.reply_text(
-                f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
-                parse_mode='Markdown'
-            )
-        else:
-            await query.message.reply_text("❌ Link not found for this quality.")
+        elif data.startswith("quality|"):
+            _, movie_title, quality = data.split("|")
+            link = MOVIES.get(movie_title, {}).get(quality)
+            if link:
+                await query.message.reply_text(
+                    f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
+                    parse_mode='Markdown'
+                )
+            else:
+                await query.message.reply_text("❌ Link not found for this quality.")
+    except Exception as e:
+        print("❌ Error in button handler:", e)
 
-# Register bot commands
+# Register handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("search", search))
 app.add_handler(CallbackQueryHandler(button))
 
-# FastAPI webhook
+# ✅ Webhook endpoint (ONLY ONE)
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
         data = await request.json()
         update = Update.de_json(data, app.bot)
         await app.process_update(update)
-        print("✅ Processed update:", data)
+        print("✅ Webhook received and processed.")
         return {"ok": True}
     except Exception as e:
         print("❌ Error processing update:", e)
@@ -134,8 +125,7 @@ async def on_startup():
     except Exception as e:
         print("❌ Error in on_startup:", e)
 
-
-# Run with uvicorn on Render
+# Run with Uvicorn
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
