@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 from fastapi import FastAPI, Request
 
-# Admin ID (replace with your real Telegram ID)
+# Admin ID
 ADMIN_ID = 6301044201
 
 # Load movies
@@ -30,13 +30,18 @@ if not BOT_TOKEN:
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 fastapi_app = FastAPI()
 
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in MOVIES.keys()
     ]
-    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        "🎬 Choose a movie to download:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
+# /search command
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("❗️ Please provide a search query.")
@@ -53,8 +58,12 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in results
     ]
-    await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        f"🔍 Search results for '{query}':",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
+# Callback for movie selection
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -77,8 +86,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.message.reply_text(
-                    f"🎬 {movie_title}
-📥 [Download here]({movie_data})",
+                    f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
                     parse_mode='Markdown'
                 )
 
@@ -95,6 +103,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("❌ Error in button handler:", e)
 
+# /addmovie command for admin
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
@@ -127,11 +136,13 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("❌ Error adding movie:", e)
         await update.message.reply_text("❌ Failed to add movie.")
 
+# Register handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("search", search))
 app.add_handler(CommandHandler("addmovie", add_movie))
 app.add_handler(CallbackQueryHandler(button))
 
+# Webhook route
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
@@ -146,6 +157,7 @@ async def webhook(request: Request):
         print("❌ Error processing update:", e)
         return {"ok": False}
 
+# Webhook setup on startup
 @fastapi_app.on_event("startup")
 async def on_startup():
     try:
@@ -156,6 +168,7 @@ async def on_startup():
     except Exception as e:
         print("❌ Error in on_startup:", e)
 
+# Start server
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
