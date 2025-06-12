@@ -1,3 +1,4 @@
+
 import json
 import os
 import asyncio
@@ -11,30 +12,30 @@ from telegram.ext import (
 )
 from fastapi import FastAPI, Request
 
+# Admin ID (replace with your real Telegram ID)
+ADMIN_ID = 6301044201
+
 # Load movies
-with open("movies.json", "r") as f:
-    MOVIES = json.load(f)
+MOVIES_FILE = "movies.json"
+if os.path.exists(MOVIES_FILE):
+    with open(MOVIES_FILE, "r") as f:
+        MOVIES = json.load(f)
+else:
+    MOVIES = {}
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is not set")
 
-# Telegram bot app
 app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-# FastAPI app
 fastapi_app = FastAPI()
 
-# Telegram commands
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in MOVIES.keys()
     ]
-    await update.message.reply_text(
-        "🎬 Choose a movie to download:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -52,10 +53,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in results
     ]
-    await update.message.reply_text(
-        f"🔍 Search results for '{query}':",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -79,7 +77,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.message.reply_text(
-                    f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
+                    f"🎬 {movie_title}
+📥 [Download here]({movie_data})",
                     parse_mode='Markdown'
                 )
 
@@ -88,7 +87,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             link = MOVIES.get(movie_title, {}).get(quality)
             if link:
                 await query.message.reply_text(
-                    f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
+                    f"🎬 {movie_title} ({quality})
+📥 [Download here]({link})",
                     parse_mode='Markdown'
                 )
             else:
@@ -96,22 +96,51 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("❌ Error in button handler:", e)
 
-# Register handlers
+async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized to add movies.")
+        return
+
+    try:
+        args = context.args
+        if len(args) < 3:
+            await update.message.reply_text("⚠️ Usage:
+`/addmovie Title Quality Link`", parse_mode="Markdown")
+            return
+
+        title = args[0]
+        quality = args[1]
+        link = args[2]
+
+        if title in MOVIES:
+            if isinstance(MOVIES[title], dict):
+                MOVIES[title][quality] = link
+            else:
+                MOVIES[title] = {quality: link}
+        else:
+            MOVIES[title] = {quality: link}
+
+        with open(MOVIES_FILE, "w") as f:
+            json.dump(MOVIES, f, indent=2)
+
+        await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added successfully!", parse_mode="Markdown")
+    except Exception as e:
+        print("❌ Error adding movie:", e)
+        await update.message.reply_text("❌ Failed to add movie.")
+
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("search", search))
+app.add_handler(CommandHandler("addmovie", add_movie))
 app.add_handler(CallbackQueryHandler(button))
 
-# ✅ Webhook endpoint (ONLY ONE)
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
         data = await request.json()
         print("📥 Telegram data:", data)
         update = Update.de_json(data, app.bot)
-
-        # ✅ Add this line
         await app.initialize()
-
         await app.process_update(update)
         print("✅ Webhook processed.")
         return {"ok": True}
@@ -119,9 +148,6 @@ async def webhook(request: Request):
         print("❌ Error processing update:", e)
         return {"ok": False}
 
-
-
-# Set webhook on startup
 @fastapi_app.on_event("startup")
 async def on_startup():
     try:
@@ -132,7 +158,6 @@ async def on_startup():
     except Exception as e:
         print("❌ Error in on_startup:", e)
 
-# Run with Uvicorn
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
