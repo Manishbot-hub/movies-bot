@@ -25,6 +25,18 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 # FastAPI app
 fastapi_app = FastAPI()
 
+@fastapi_app.post("/webhook")
+async def webhook(request: Request):
+    try:
+        data = await request.json()
+        update = Update.de_json(data, app.bot)
+        await app.process_update(update)
+        print("✅ Webhook received and processed.")
+        return {"ok": True}
+    except Exception as e:
+        print("❌ Error processing update:", e)
+        return {"ok": False}
+
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
