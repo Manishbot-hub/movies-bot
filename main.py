@@ -30,17 +30,13 @@ fastapi_app = FastAPI()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
-        "👋 Welcome to *Movies World*!
-
-"
-        "🎬 You can:
-"
-        "🔍 Search a movie with `/search MovieName`
-
-"
+        "👋 Welcome to *Movies World*!\n\n"
+        "🎬 You can:\n"
+        "🔍 Search a movie with `/search MovieName`\n\n"
         "Type a command to begin!"
     )
     await update.message.reply_text(message, parse_mode="Markdown")
+
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
