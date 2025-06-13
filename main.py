@@ -20,9 +20,11 @@ logging.basicConfig(level=logging.INFO)
 
 # Firebase setup
 cred = credentials.Certificate("firebase_key.json")
-firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://movie-telegram-bot-cdf94-default-rtdb.asia-southeast1.firebasedatabase.app/"
-})
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred, {
+        "databaseURL": "https://movie-telegram-bot-cdf94-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    })
+
 
 # Admin Telegram ID
 ADMIN_ID = 6301044201
