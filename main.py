@@ -15,15 +15,15 @@ from fastapi import FastAPI, Request
 import firebase_admin
 from firebase_admin import credentials, db
 
-# Logging (for debugging on Render)
-logging.basicConfig(level=logging.INFO)
-
-# Firebase setup
+# Load Firebase credentials
 cred = credentials.Certificate("firebase_key.json")
+
+# ✅ Only initialize if not already done
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {
         "databaseURL": "https://movie-telegram-bot-cdf94-default-rtdb.asia-southeast1.firebasedatabase.app/"
     })
+
 
 
 # Admin Telegram ID
@@ -103,14 +103,18 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Button handler
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     data = query.data
-    movies = get_movies()
+
+    # ✅ Safely answer callback query first
+    try:
+        await query.answer()
+    except Exception as e:
+        print("⚠️ Failed to answer callback query:", e)
 
     try:
         if data.startswith("movie|"):
             movie_title = data.split("|")[1]
-            movie_data = movies.get(movie_title)
+            movie_data = get_movies().get(movie_title)
 
             if isinstance(movie_data, dict):
                 keyboard = [
@@ -130,7 +134,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif data.startswith("quality|"):
             _, movie_title, quality = data.split("|")
-            link = movies.get(movie_title, {}).get(quality)
+            link = get_movies().get(movie_title, {}).get(quality)
             if link:
                 await query.message.reply_text(
                     f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
@@ -140,6 +144,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("❌ Link not found for this quality.")
     except Exception as e:
         print("❌ Error in button handler:", e)
+
 
 
 # /addmovie command
