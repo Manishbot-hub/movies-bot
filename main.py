@@ -57,18 +57,13 @@ def remove_movie_from_db(title):
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    movies = get_movies()
-    keyboard = [
-        [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
-        for title in movies.keys()
-    ]
-    message = (
+    await update.message.reply_text(
         "👋 Welcome to *Movies World!*\n\n"
         "🎬 You can:\n"
         "🔍 Search a movie with `/search MovieName`\n\n"
-        "Type a command to begin!"
+        "Type a command to begin!",
+        parse_mode="Markdown"
     )
-    await update.message.reply_text(message, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 # /search command
