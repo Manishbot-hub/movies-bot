@@ -42,16 +42,12 @@ fastapi_app = FastAPI()
 
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    movies = get_movies()
-    if not movies:
-        await update.message.reply_text("🎬 No movies available right now.")
-        return
-
-    keyboard = [
-        [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
-        for title in movies.keys()
-    ]
-    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
+    welcome_text = (
+        "👋 *Welcome to Movies World!*\n\n"
+        "🎬 Use /search followed by the movie name to find and download movies.\n"
+        "⬇️ You can also browse available movies below:"
+    )
+    await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
 # /search command
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
