@@ -1,8 +1,9 @@
 import json
 import os
-import asyncio
 import logging
-
+import asyncio
+import firebase_admin
+from firebase_admin import credentials, db
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -12,69 +13,55 @@ from telegram.ext import (
 )
 from fastapi import FastAPI, Request
 
-import firebase_admin
-from firebase_admin import credentials, db
+# Enable logging
+logging.basicConfig(level=logging.INFO)
 
-# Load Firebase credentials
+# Firebase setup
 cred = credentials.Certificate("firebase_key.json")
-
-# ✅ Only initialize if not already done
-if not firebase_admin._apps:
+try:
+    firebase_admin.get_app()
+except ValueError:
     firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://movie-telegram-bot-cdf94-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        "databaseURL": os.getenv("FIREBASE_DB_URL")
     })
 
+ref = db.reference("movies")
 
+def get_movies():
+    return ref.get() or {}
 
-# Admin Telegram ID
-ADMIN_ID = 6301044201
+def save_movies(data):
+    ref.set(data)
 
-# Bot token from environment
+# Telegram and FastAPI setup
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN is not set")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "6301044201"))
 
-# Telegram + FastAPI apps
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 fastapi_app = FastAPI()
 
-
-# Helper to read movies
-def get_movies():
-    ref = db.reference("movies")
-    return ref.get() or {}
-
-# Helper to write movies
-def save_movie(title, quality, link):
-    ref = db.reference("movies")
-    ref.child(title).update({quality: link})
-
-# Helper to remove a movie
-def remove_movie_from_db(title):
-    ref = db.reference("movies")
-    ref.child(title).delete()
-
-
 # /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Welcome to *Movies World!*\n\n"
-        "🎬 You can:\n"
-        "🔍 Search a movie with `/search MovieName`\n\n"
-        "Type a command to begin!",
-        parse_mode="Markdown"
-    )
+    movies = get_movies()
+    if not movies:
+        await update.message.reply_text("🎬 No movies available right now.")
+        return
 
+    keyboard = [
+        [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
+        for title in movies.keys()
+    ]
+    await update.message.reply_text("🎬 Choose a movie to download:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # /search command
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    movies = get_movies()
     if not context.args:
         await update.message.reply_text("❗️ Please provide a search query.")
         return
 
     query = ' '.join(context.args).lower()
-    movies = get_movies()
-    results = {title: links for title, links in movies.items() if query in title.lower()}
+    results = {title: link for title, link in movies.items() if query in title.lower()}
 
     if not results:
         suggestions = [title for title in movies if any(q in title.lower() for q in query.split())]
@@ -89,63 +76,53 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(title, callback_data=f"movie|{title}")]
         for title in results
     ]
-    await update.message.reply_text(
-        f"🔍 Search results for '{query}':",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text(f"🔍 Search results for '{query}':", reply_markup=InlineKeyboardMarkup(keyboard))
 
-
-# Button handler
+# Handle button clicks
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    data = query.data
-
-    # ✅ Safely answer callback query first
     try:
         await query.answer()
     except Exception as e:
-        print("⚠️ Failed to answer callback query:", e)
+        logging.warning("❌ Failed to answer callback query: %s", e)
 
-    try:
-        if data.startswith("movie|"):
-            movie_title = data.split("|")[1]
-            movie_data = get_movies().get(movie_title)
+    data = query.data
+    movies = get_movies()
 
-            if isinstance(movie_data, dict):
-                keyboard = [
-                    [InlineKeyboardButton(q, callback_data=f"quality|{movie_title}|{q}")]
-                    for q in movie_data
-                ]
-                await query.message.reply_text(
-                    f"🎥 Choose quality for *{movie_title}*:",
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            else:
-                await query.message.reply_text(
-                    f"🎬 {movie_title}\n📥 [Download here]({movie_data})",
-                    parse_mode='Markdown'
-                )
+    if data.startswith("movie|"):
+        title = data.split("|")[1]
+        movie_data = movies.get(title)
 
-        elif data.startswith("quality|"):
-            _, movie_title, quality = data.split("|")
-            link = get_movies().get(movie_title, {}).get(quality)
-            if link:
-                await query.message.reply_text(
-                    f"🎬 {movie_title} ({quality})\n📥 [Download here]({link})",
-                    parse_mode='Markdown'
-                )
-            else:
-                await query.message.reply_text("❌ Link not found for this quality.")
-    except Exception as e:
-        print("❌ Error in button handler:", e)
+        if isinstance(movie_data, dict):
+            keyboard = [
+                [InlineKeyboardButton(q, callback_data=f"quality|{title}|{q}")]
+                for q in movie_data
+            ]
+            await query.message.reply_text(
+                f"🎥 Choose quality for *{title}*:",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await query.message.reply_text(
+                f"🎬 {title}\n📥 [Download here]({movie_data})",
+                parse_mode="Markdown"
+            )
 
-
+    elif data.startswith("quality|"):
+        _, title, quality = data.split("|")
+        link = movies.get(title, {}).get(quality)
+        if link:
+            await query.message.reply_text(
+                f"🎬 {title} ({quality})\n📥 [Download here]({link})",
+                parse_mode='Markdown'
+            )
+        else:
+            await query.message.reply_text("❌ Link not found for this quality.")
 
 # /addmovie command
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to add movies.")
         return
 
@@ -158,33 +135,41 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = args[0]
         quality = args[1]
         link = args[2]
-        save_movie(title, quality, link)
 
+        movies = get_movies()
+        if title in movies:
+            if isinstance(movies[title], dict):
+                movies[title][quality] = link
+            else:
+                movies[title] = {quality: link}
+        else:
+            movies[title] = {quality: link}
+
+        save_movies(movies)
         await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added successfully!", parse_mode="Markdown")
     except Exception as e:
-        print("❌ Error adding movie:", e)
+        logging.error("❌ Error adding movie: %s", e)
         await update.message.reply_text("❌ Failed to add movie.")
-
 
 # /removemovie command
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to remove movies.")
         return
 
-    try:
-        if not context.args:
-            await update.message.reply_text("⚠️ Usage:\n/removemovie MovieName", parse_mode="Markdown")
-            return
+    if not context.args:
+        await update.message.reply_text("⚠️ Usage:\n/removemovie Title", parse_mode="Markdown")
+        return
 
-        title = ' '.join(context.args)
-        remove_movie_from_db(title)
+    title = ' '.join(context.args)
+    movies = get_movies()
+
+    if title in movies:
+        del movies[title]
+        save_movies(movies)
         await update.message.reply_text(f"🗑️ Movie *{title}* removed successfully!", parse_mode="Markdown")
-    except Exception as e:
-        print("❌ Error removing movie:", e)
-        await update.message.reply_text("❌ Failed to remove movie.")
-
+    else:
+        await update.message.reply_text("❌ Movie not found.")
 
 # Register handlers
 app.add_handler(CommandHandler("start", start))
@@ -193,36 +178,37 @@ app.add_handler(CommandHandler("addmovie", add_movie))
 app.add_handler(CommandHandler("removemovie", remove_movie))
 app.add_handler(CallbackQueryHandler(button))
 
-
-# Webhook endpoint
+# FastAPI webhook
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
         data = await request.json()
-        logging.info("📥 Telegram data: %s", data)
+        logging.info("📥 Telegram update received.")
         update = Update.de_json(data, app.bot)
         await app.initialize()
         await app.process_update(update)
-        logging.info("✅ Webhook processed.")
         return {"ok": True}
     except Exception as e:
-        logging.error("❌ Error processing update: %s", e)
+        logging.error("❌ Error in webhook: %s", e)
         return {"ok": False}
 
+# ✅ FastAPI root route to test deployment
+@fastapi_app.get("/")
+async def root():
+    return {"status": "Bot is running"}
 
-# Set webhook on startup
+# Webhook setup
 @fastapi_app.on_event("startup")
 async def on_startup():
     try:
         webhook_url = "https://movies-bot-1-uukn.onrender.com/webhook"
-        logging.info(f"🌐 Setting webhook to: {webhook_url}")
+        logging.info(f"🌐 Setting webhook: {webhook_url}")
         await app.bot.set_webhook(webhook_url)
         logging.info("✅ Webhook set successfully")
     except Exception as e:
-        logging.error("❌ Error in on_startup: %s", e)
+        logging.error("❌ Webhook setup failed: %s", e)
 
-
-# Run server
+# Uvicorn launch
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
