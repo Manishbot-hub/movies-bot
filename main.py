@@ -45,7 +45,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "👋 *Welcome to Movies World!*\n\n"
         "🎬 Use /search followed by the movie name to find and download movies.\n"
-        "⬇️ You can also browse available movies below:"
+        
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
