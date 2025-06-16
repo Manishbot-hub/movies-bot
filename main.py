@@ -22,7 +22,9 @@ if not firebase_json or not firebase_url:
     raise ValueError("Firebase credentials or database URL is missing!")
 
 cred = credentials.Certificate(json.loads(firebase_json))
-firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
+
 
 # Firebase DB reference
 ref = db.reference("movies")
