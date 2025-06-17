@@ -130,26 +130,26 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ Usage:\n`/addmovie Title Quality Link`", parse_mode="Markdown")
             return
 
-        # Assume last two arguments are quality and link
-        title = " ".join(args[:-2])
-        quality = args[-2]
-        link = args[-1]
+        # Combine all parts except last two into the title
+        *title_parts, quality, link = args
+        title = "_".join(title_parts)
 
-        if title in MOVIES:
-            if isinstance(MOVIES[title], dict):
-                MOVIES[title][quality] = link
+        # Firebase logic
+        movies = get_movies()
+        if title in movies:
+            if isinstance(movies[title], dict):
+                movies[title][quality] = link
             else:
-                MOVIES[title] = {quality: link}
+                movies[title] = {quality: link}
         else:
-            MOVIES[title] = {quality: link}
+            movies[title] = {quality: link}
 
-        # Save to Firebase or file depending on your setup
-        ref.set(MOVIES)
-
+        ref.set(movies)
         await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added!", parse_mode="Markdown")
     except Exception as e:
         print("❌ Error adding movie:", e)
         await update.message.reply_text("❌ Failed to add movie.")
+
 
 
 
