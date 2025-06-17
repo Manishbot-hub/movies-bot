@@ -119,21 +119,39 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("❌ Error in button handler:", e)
 
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to add movies.")
         return
 
-    args = context.args
-    if len(args) < 3:
-        await update.message.reply_text("⚠️ Usage: `/addmovie Title Quality Link`", parse_mode="Markdown")
-        return
+    try:
+        args = context.args
+        if len(args) < 3:
+            await update.message.reply_text("⚠️ Usage:\n/addmovie Title Quality Link", parse_mode="Markdown")
+            return
 
-    title = args[0]
-    quality = args[1]
-    link = args[2]
+        # Join all parts except the last two as title
+        title = ' '.join(args[:-2])
+        quality = args[-2]
+        link = args[-1]
 
-    save_movie(title, quality, link)
-    await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added!", parse_mode="Markdown")
+        # Optional: replace spaces with underscores in title
+        title = title.replace(" ", "_")
+
+        if title in MOVIES:
+            if isinstance(MOVIES[title], dict):
+                MOVIES[title][quality] = link
+            else:
+                MOVIES[title] = {quality: link}
+        else:
+            MOVIES[title] = {quality: link}
+
+        db.reference("movies").set(MOVIES)  # if using Firebase
+        await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added successfully!", parse_mode="Markdown")
+    except Exception as e:
+        print("❌ Error adding movie:", e)
+        await update.message.reply_text("❌ Failed to add movie.")
+
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
