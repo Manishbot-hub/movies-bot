@@ -179,11 +179,15 @@ async def webhook(request: Request):
     try:
         data = await request.json()
         update = Update.de_json(data, app.bot)
+
+        if not app.running:  # Ensure initialized only once
+            await app.initialize()
+
         await app.process_update(update)
         return {"ok": True}
     except Exception as e:
         print("❌ Webhook Error:", e)
-        return {"ok": False, "error": str(e)}
+        return {"ok": False}
 
 
 # Uptime check
