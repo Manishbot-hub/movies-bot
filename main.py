@@ -127,16 +127,13 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         args = context.args
         if len(args) < 3:
-            await update.message.reply_text("⚠️ Usage:\n/addmovie Title Quality Link", parse_mode="Markdown")
+            await update.message.reply_text("⚠️ Usage:\n`/addmovie Title Quality Link`", parse_mode="Markdown")
             return
 
-        # Join all parts except the last two as title
-        title = ' '.join(args[:-2])
+        # Assume last two arguments are quality and link
+        title = " ".join(args[:-2])
         quality = args[-2]
         link = args[-1]
-
-        # Optional: replace spaces with underscores in title
-        title = title.replace(" ", "_")
 
         if title in MOVIES:
             if isinstance(MOVIES[title], dict):
@@ -146,11 +143,14 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             MOVIES[title] = {quality: link}
 
-        db.reference("movies").set(MOVIES)  # if using Firebase
-        await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added successfully!", parse_mode="Markdown")
+        # Save to Firebase or file depending on your setup
+        ref.set(MOVIES)
+
+        await update.message.reply_text(f"✅ Movie *{title}* ({quality}) added!", parse_mode="Markdown")
     except Exception as e:
         print("❌ Error adding movie:", e)
         await update.message.reply_text("❌ Failed to add movie.")
+
 
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
