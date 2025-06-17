@@ -14,7 +14,7 @@ import firebase_admin
 from firebase_admin import credentials, db
 
 # Firebase setup using env vars
-firebase_key = json.loads(os.getenv("FIREBASE_KEY_JSON", "{}"))
+firebase_key = json.loads(os.getenv("FIREBASE_CREDENTIALS", "{}"))
 firebase_url = os.getenv("FIREBASE_DB_URL")
 cred = credentials.Certificate(firebase_key)
 firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
