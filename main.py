@@ -176,10 +176,15 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Webhook endpoint
 @fastapi_app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, app.bot)
-    await app.process_update(update)
-    return {"ok": True}
+    try:
+        data = await request.json()
+        update = Update.de_json(data, app.bot)
+        await app.process_update(update)
+        return {"ok": True}
+    except Exception as e:
+        print("❌ Webhook Error:", e)
+        return {"ok": False, "error": str(e)}
+
 
 # Uptime check
 @fastapi_app.get("/")
