@@ -36,7 +36,7 @@ def get_movies():
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎬 Welcome to MovieBot!\nUse /search to find movies ")
+    await update.message.reply_text("🎬 Welcome to Movies World!\nUse /search to find movies ")
 
 # /search
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
