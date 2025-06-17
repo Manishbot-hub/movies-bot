@@ -103,16 +103,19 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage:\n/addmovie Title Genre Quality Link", parse_mode="Markdown")
         return
 
-    # Combine all parts except last two into the title
-        *title_parts, quality, link = args
-        title = "_".join(title_parts)
+    # Extract genre, quality, and link from the end, and combine the rest as title
+    *title_parts, genre, quality, link = args
+    title = "_".join(title_parts)
 
     movie = get_movies().get(title, {})
     movie[quality] = link
     movie["genre"] = genre
     ref.child(title).set(movie)
 
-    await update.message.reply_text(f"✅ Added *{title}* ({quality}, {genre})", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ Added *{title}* ({quality}, {genre})", parse_mode="Markdown"
+    )
+
 
 # /removemovie [partial title]
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
