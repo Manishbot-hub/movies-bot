@@ -103,10 +103,9 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage:\n/addmovie Title Genre Quality Link", parse_mode="Markdown")
         return
 
-    title = args[0]
-    genre = args[1]
-    quality = args[2]
-    link = args[3]
+    # Combine all parts except last two into the title
+        *title_parts, quality, link = args
+        title = "_".join(title_parts)
 
     movie = get_movies().get(title, {})
     movie[quality] = link
