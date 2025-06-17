@@ -196,6 +196,8 @@ async def on_startup():
     webhook_url = os.getenv("WEBHOOK_URL")
     if not webhook_url:
         raise ValueError("WEBHOOK_URL is not set")
+
+    await app.initialize()  # ✅ <-- Fix: initialize before processing updates
     await app.bot.set_webhook(webhook_url)
     print(f"✅ Webhook set to: {webhook_url}")
 
