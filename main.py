@@ -14,12 +14,10 @@ import firebase_admin
 from firebase_admin import credentials, db
 
 # Firebase setup using env vars
-firebase_key = json.loads(os.getenv("FIREBASE_CREDENTIALS", "{}"))
+firebase_key = json.loads(os.getenv("FIREBASE_KEY_JSON", "{}"))
 firebase_url = os.getenv("FIREBASE_DB_URL")
-if not firebase_admin._apps:
-    cred = credentials.Certificate(firebase_key)
-    firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
-
+cred = credentials.Certificate(firebase_key)
+firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
 ref = db.reference("movies")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -36,7 +34,7 @@ def get_movies():
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎬 Welcome to Movies World!\nUse /search to find movies ")
+    await update.message.reply_text("🎬 Welcome to MovieBot!\nUse /search to find movies or /admin to see admin commands.")
 
 # /search
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,7 +51,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = [
-        [InlineKeyboardButton(f"{k} ({v.get('genre', 'Unknown')})", callback_data=f"movie|{k}")]
+        [InlineKeyboardButton(k, callback_data=f"movie|{k}")]
         for k in results
     ]
     await update.message.reply_text("🔍 Results:", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -74,11 +72,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             keyboard = [
-                [InlineKeyboardButton(q, url=movie[q])] for q in movie if q not in ("genre",)
+                [InlineKeyboardButton(q, url=movie[q])] for q in movie
             ]
-            genre = movie.get("genre", "Unknown")
             await query.message.reply_text(
-                f"🎬 *{title}* ({genre})\nChoose quality:",
+                f"🎬 *{title}*\nChoose quality:",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
@@ -91,7 +88,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("❌ Button error:", e)
 
-# /addmovie Title Genre Quality Link
+# /addmovie Title Quality Link
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
@@ -99,23 +96,18 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     args = context.args
-    if len(args) < 4:
-        await update.message.reply_text("Usage:\n/addmovie Title Genre Quality Link", parse_mode="Markdown")
+    if len(args) < 3:
+        await update.message.reply_text("Usage:\n/addmovie Title Quality Link", parse_mode="Markdown")
         return
 
-    # Extract genre, quality, and link from the end, and combine the rest as title
-    *title_parts, genre, quality, link = args
+    *title_parts, quality, link = args
     title = "_".join(title_parts)
 
     movie = get_movies().get(title, {})
     movie[quality] = link
-    movie["genre"] = genre
     ref.child(title).set(movie)
 
-    await update.message.reply_text(
-        f"✅ Added *{title}* ({quality}, {genre})", parse_mode="Markdown"
-    )
-
+    await update.message.reply_text(f"✅ Added *{title}* ({quality})", parse_mode="Markdown")
 
 # /removemovie [partial title]
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,7 +165,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👑 *Admin Commands:*\n"
-        "/addmovie Title Genre Quality Link\n"
+        "/addmovie Title Quality Link\n"
         "/updatemovie Title Quality Link\n"
         "/removemovie Title",
         parse_mode="Markdown"
@@ -198,8 +190,6 @@ async def on_startup():
     webhook_url = os.getenv("WEBHOOK_URL")
     if not webhook_url:
         raise ValueError("WEBHOOK_URL is not set")
-
-    await app.initialize()  # ✅ <-- Fix: initialize before processing updates
     await app.bot.set_webhook(webhook_url)
     print(f"✅ Webhook set to: {webhook_url}")
 
