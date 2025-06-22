@@ -73,13 +73,42 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("❌ Movie not found.")
                 return
 
-            keyboard = [
-                [InlineKeyboardButton(q, url=movie[q])] for q in movie
-            ]
+            keyboard = []
+            for quality in movie:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{quality} 📥", callback_data=f"download|{title}|{quality}"
+                    ),
+                    InlineKeyboardButton(
+                        "🚨 Report", callback_data=f"report|{title}|{quality}"
+                    )
+                ])
+
             await query.message.reply_text(
-                f"🎬 *{title}*\nChoose quality:",
+                f"🎬 *{title}*\nChoose a quality to download or report a broken link:",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+        elif data.startswith("download|"):
+            _, title, quality = data.split("|")
+            link = get_movies().get(title, {}).get(quality)
+            if link:
+                await query.message.reply_text(
+                    f"🎬 {title} ({quality})\n📥 [Download here]({link})",
+                    parse_mode='Markdown'
+                )
+            else:
+                await query.message.reply_text("❌ Link not found for this quality.")
+
+        elif data.startswith("report|"):
+            _, title, quality = data.split("|")
+            await query.message.reply_text("📨 Thank you! We've received the report.")
+
+            await app.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"🚨 *Broken Link Reported!*\n🎬 *Movie:* {title}\n💾 *Quality:* {quality}\n👤 *User:* @{query.from_user.username or query.from_user.id}",
+                parse_mode="Markdown"
             )
 
         elif data.startswith("remove|"):
@@ -89,6 +118,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print("❌ Button error:", e)
+
 
 # /addmovie Title Quality Link
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
