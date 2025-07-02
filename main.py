@@ -1,4 +1,5 @@
 import os
+import httpx
 import json
 import asyncio
 import logging
@@ -37,16 +38,14 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 user_last_bot_message = {}
 
-async def shorten_link(original_link):
-    api_url = f"https://adrinolinks.com/api?api={ADRINOLINKS_API_TOKEN}&url={original_link}"
-    try:
-        response = requests.get(api_url)
-        data = response.json()
-        if data["status"] == "success":
-            return data["shortenedUrl"]
-    except:
-        pass
-    return original_link
+async def shorten_link(link):
+    async with httpx.AsyncClient() as client:
+        response = await client.post("https://adrinolinks/api", json={"url": link})
+        if response.status_code == 200:
+            return response.json().get('shortenedUrl')
+        else:
+            return link  # fallback
+
 
 def get_movies():
     return ref.get() or {}
@@ -60,7 +59,7 @@ async def delete_last(user_id, context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_last(update.effective_user.id, context)
-    text = "👋 Welcome! Use /addmovie, /uploadbulk, or /movies to browse."
+    text = "👋 Welcome to Movies World! Use /addmovie, /uploadbulk, or /movies to browse."
     msg = await update.message.reply_text(text)
     user_last_bot_message[update.effective_user.id] = msg.message_id
 
@@ -77,10 +76,9 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     *title_parts, quality, original_link = args
     title = "_".join(title_parts)
-    link = await asyncio.to_thread(shorten_link, original_link)
-
+    short_link = await shorten_link(original_link)  # ✅ FIXED HERE
     movie = get_movies().get(title, {})
-    movie[quality] = link
+    movie[quality] = short_link  # ✅ FIXED HERE
     ref.child(title).set(movie)
 
     await update.message.reply_text(f"✅ Added *{title}* ({quality})", parse_mode="Markdown")
@@ -100,7 +98,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for line in lines:
         try:
             title, quality, link = [x.strip() for x in line.split("|")]
-            short_link = await asyncio.to_thread(shorten_link, link)
+            short_link = await shorten_link(original_link)  # ✅ Correct
             movie = get_movies().get(title, {})
             movie[quality] = short_link
             ref.child(title).set(movie)
