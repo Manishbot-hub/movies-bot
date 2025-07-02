@@ -79,13 +79,34 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if query.data.startswith("movie_"):
-        title = query.data.replace("movie_", "")
+    data = query.data
+
+    if data.startswith("movie_"):
+        title, quality = data[6:].split("|", 1)
         movies = get_movies()
-        text = f"*{title}*\n\n"
-        for quality, link in movies.get(title, {}).items():
-            text += f"🔗 *{quality}*: {link}\n"
-        await query.edit_message_text(text=text, parse_mode="Markdown")
+        movie = movies.get(title, {})
+        link = movie.get(quality)
+        if link:
+            await context.bot.send_message(chat_id=query.message.chat.id, text=f"🎬 *{title}* ({quality}):\n{link}", parse_mode="Markdown")
+        else:
+            await context.bot.send_message(chat_id=query.message.chat.id, text="❌ Link not found.")
+
+        # ✅ Delete the old message with buttons
+        try:
+            await query.message.delete()
+        except Exception as e:
+            print(f"Error deleting message: {e}")
+
+    elif data.startswith("remove_"):
+        title = data[7:]
+        ref.child(title).delete()
+        await query.edit_message_text(f"✅ *{title}* has been removed.", parse_mode="Markdown")
+
+    elif data.startswith("report_"):
+        title, quality = data[7:].split("|", 1)
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 User @{query.from_user.username or query.from_user.id} reported a broken link for:\n*{title}* ({quality})", parse_mode="Markdown")
+        await query.edit_message_text("✅ Thanks! The admin has been notified.", parse_mode="Markdown")
+
 
 # ✅ /addmovie
 async def addmovie(update: Update, context: ContextTypes.DEFAULT_TYPE):
