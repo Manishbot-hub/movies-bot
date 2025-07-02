@@ -14,7 +14,8 @@ FIREBASE_URL = os.getenv("FIREBASE_URL")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
-ADSHORT_API = os.getenv("ADSHORT_API")
+ADRINOLINKS_API_TOKEN = os.getenv("ADRINOLINKS_API_TOKEN")
+
 
 cred = credentials.Certificate(firebase_key)
 firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
