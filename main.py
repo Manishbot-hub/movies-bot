@@ -34,9 +34,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 ADRINOLINKS_API_TOKEN = os.getenv("ADRINOLINKS_API_TOKEN")
 
 
-cred = credentials.Certificate(firebase_key)
-firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
-ref = db.reference("movies")
+
 
 app = Application.builder().token(BOT_TOKEN).build()
 fastapi_app = FastAPI()
