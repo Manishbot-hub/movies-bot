@@ -38,7 +38,7 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 user_last_bot_message = {}
 
-API_URL = "https://adrinolinks.in/member/tools/api"  # ✅ Replace with actual Adrinolinks API URL
+API_URL = "https://adrinolinks.in/api?api=3ffda80fb70a54aaf0bfea117a49710a89cd4192&url=yourdestinationlink.com&alias=CustomAlias"  # ✅ Replace with actual Adrinolinks API URL
 
 async def shorten_link(link):
     async with httpx.AsyncClient() as client:
