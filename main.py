@@ -1,4 +1,5 @@
-import os
+import os  
+import urllib.parse
 import httpx
 import json
 import asyncio
@@ -38,29 +39,31 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 user_last_bot_message = {}
 
-API_KEY = ADRINOLINKS_API_TOKEN  # From environment variable
+
+
+API_KEY = ADRINOLINKS_API_TOKEN
 BASE_URL = "https://adrinolinks.in/st"
 
 async def shorten_link(link):
     params = {
         "api": API_KEY,
-        "url": link
+        "url": urllib.parse.quote(link, safe='')  # ✅ Proper URL encoding
     }
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
             response = await client.get(BASE_URL, params=params)
-            if response.status_code == 200:
+            logging.info(f"Shortener API status: {response.status_code}, Response: {response.text[:200]}")
+
+            if response.status_code == 200 and not response.text.startswith("<!DOCTYPE html>"):
                 short_url = response.text.strip()
-                logging.info(f"Shortened link: {short_url}")
                 return short_url
             else:
-                logging.error(f"Shorten failed. Status: {response.status_code}, Response: {response.text}")
-                return link  # Return original link if API fails
+                logging.error(f"Shortener returned error page or bad response:\n{response.text}")
+                return link  # Return original link on error
         except Exception as e:
-            logging.error(f"Shorten link failed: {e}")
-            return link  # Return original link if error
-
+            logging.error(f"Shortener exception: {e}")
+            return link
 
 def get_movies():
     return ref.get() or {}
