@@ -187,6 +187,37 @@ async def update_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie[quality] = link
     ref.child(title).set(movie)
     await update.message.reply_text(f"✅ Movie *{title}* updated with new link for {quality}.", parse_mode="Markdown")
+# /loadbulktxt command
+async def load_bulk_from_txt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Not authorized.")
+        return
+
+    file_path = "movies_bulk.txt"
+
+    try:
+        with open(file_path, "r") as f:
+            lines = f.readlines()
+
+        success = 0
+        for line in lines:
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) != 3:
+                continue
+
+            title, quality, link = parts
+            title = title.replace(" ", "_")
+
+            movie = get_movies().get(title, {})
+            movie[quality] = link
+            ref.child(title).set(movie)
+            success += 1
+
+        await update.message.reply_text(f"✅ Bulk upload complete: Added {success} movies from TXT file.")
+    except Exception as e:
+        print("❌ Error loading from txt:", e)
+        await update.message.reply_text(f"❌ Failed to load movies. Error: {e}")
 
 # /admin command
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -242,6 +273,7 @@ app.add_handler(CommandHandler("removemovie", remove_movie))
 app.add_handler(CommandHandler("updatemovie", update_movie))
 app.add_handler(CommandHandler("admin", admin_panel))
 app.add_handler(CallbackQueryHandler(button))
+app.add_handler(CommandHandler("loadbulktxt", load_bulk_from_txt))
 
 # Launch FastAPI server
 if __name__ == "__main__":
