@@ -26,7 +26,7 @@ fastapi_app = FastAPI()
 # ✅ Link Shortener
 def shorten_link(original_link):
     try:
-        response = requests.get(f"https://adrinolinks.com/api?api={ADSHORT_API}&url={original_link}")
+        response = requests.get(f"https://adrinolinks.com/api?api={ADRINOLINKS_API_TOKEN}&url={original_link}")
         data = response.json()
         return data["shortenedUrl"] if data.get("status") == "success" else original_link
     except Exception as e:
@@ -40,14 +40,9 @@ def get_movies():
 # ✅ /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome to Movie Bot!\n\n"
+        "👋 Welcome to Movie World!\n\n"
         "Commands:\n"
         "/search <keyword>\n"
-        "/addmovie <title> <quality> <link>\n"
-        "/removemovie <partial title>\n"
-        "/uploadbulk <bulk movies>\n"
-        "/report <movie title>\n"
-        "/admin (for admin list)"
     )
 
 # ✅ /search
@@ -146,7 +141,6 @@ async def removemovie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ✅ Button delete movie
-@app.callback_query_handler
 async def delete_movie_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -154,6 +148,7 @@ async def delete_movie_button(update: Update, context: ContextTypes.DEFAULT_TYPE
         title = query.data.replace("delete_", "")
         ref.child(title).delete()
         await query.edit_message_text(f"✅ Deleted: *{title}*", parse_mode="Markdown")
+
 
 # ✅ /report broken link
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -193,6 +188,7 @@ app.add_handler(CommandHandler("removemovie", removemovie))
 app.add_handler(CommandHandler("report", report))
 app.add_handler(CommandHandler("admin", admin))
 app.add_handler(CallbackQueryHandler(button))
+app.add_handler(CallbackQueryHandler(delete_movie_button, pattern=r"^delete_"))
 
 # ✅ FastAPI root check
 @fastapi_app.get("/")
