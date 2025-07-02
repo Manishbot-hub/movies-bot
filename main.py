@@ -187,22 +187,21 @@ async def update_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie[quality] = link
     ref.child(title).set(movie)
     await update.message.reply_text(f"✅ Movie *{title}* updated with new link for {quality}.", parse_mode="Markdown")
-# /uploadbulk - Bulk add movies from a multiline Telegram message
+# /uploadbulk - Bulk add movies from multiline Telegram message
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    if not context.message.text:
-        await update.message.reply_text("❗️ Please send the movie list in the message body.\nFormat:\nMovie Title, Quality, Link (each on a new line)")
+    if not update.message or not update.message.text:
+        await update.message.reply_text("❗️ Please send the movie list in the message body.\nFormat:\nTitle, Quality, Link (each on new line)")
         return
 
-    # Get full text after command
     bulk_text = update.message.text.replace("/uploadbulk", "").strip()
 
     if not bulk_text:
-        await update.message.reply_text("❗️ No data found after command.\nSend like:\nMovie Title, Quality, Link")
+        await update.message.reply_text("❗️ No data found after command.\nSend like:\nTitle, Quality, Link")
         return
 
     lines = bulk_text.split('\n')
@@ -211,16 +210,17 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for line in lines:
         parts = [p.strip() for p in line.split(",")]
         if len(parts) < 3:
-            continue  # Skip bad lines
+            continue  # Skip invalid lines
+
         title, quality, link = parts[0], parts[1], parts[2]
 
-        # Save in Firebase
         movie = get_movies().get(title, {})
         movie[quality] = link
         ref.child(title).set(movie)
         added_count += 1
 
     await update.message.reply_text(f"✅ Bulk upload complete: Added {added_count} movies.")
+
 
 
 # /admin command
