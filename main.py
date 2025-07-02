@@ -244,6 +244,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("addmovie", add_movie))
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
+telegram_app.add_handler(CommandHandler("search", search_movie))
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, list_movies))
