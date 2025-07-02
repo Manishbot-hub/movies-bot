@@ -38,27 +38,29 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 user_last_bot_message = {}
 
-API_URL = "https://adrinolinks.in/api?api=3ffda80fb70a54aaf0bfea117a49710a89cd4192&url=yourdestinationlink.com&alias=CustomAlias&format=text"  # ✅ Replace with correct Adrinolinks API URL
+API_KEY = ADRINOLINKS_API_TOKEN  # From environment variable
+BASE_URL = "https://adrinolinks.in/st"
 
 async def shorten_link(link):
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                API_URL,
-                headers={"Authorization": f"Bearer {ADRINOLINKS_API_TOKEN}"},
-                json={"url": link}
-            )
-            logging.info(f"Shorten API Status: {response.status_code}, Body: {response.text}")  # ✅ Log API response
+    params = {
+        "api": API_KEY,
+        "url": link
+    }
 
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        try:
+            response = await client.get(BASE_URL, params=params)
             if response.status_code == 200:
-                data = response.json()
-                return data.get("shortenedUrl", link)  # ✅ Make sure this matches the actual API field name
+                short_url = response.text.strip()
+                logging.info(f"Shortened link: {short_url}")
+                return short_url
             else:
-                logging.error(f"Adrinolinks API Error: {response.status_code} {response.text}")
-                return link
+                logging.error(f"Shorten failed. Status: {response.status_code}, Response: {response.text}")
+                return link  # Return original link if API fails
         except Exception as e:
             logging.error(f"Shorten link failed: {e}")
-            return link
+            return link  # Return original link if error
+
 
 def get_movies():
     return ref.get() or {}
