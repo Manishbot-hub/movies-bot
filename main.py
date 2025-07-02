@@ -119,6 +119,36 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
+    
+async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await delete_last(user_id, context)
+
+    args = context.args
+    if not args:
+        msg = await update.message.reply_text("Usage:\n/search keyword")
+        user_last_bot_message[user_id] = msg.message_id
+        return
+
+    query = " ".join(args).lower()
+    movies = get_movies()
+    matches = [title for title in movies if query in title.lower()]
+
+    if not matches:
+        msg = await update.message.reply_text("❌ No matching movies found.")
+        user_last_bot_message[user_id] = msg.message_id
+        return
+
+    keyboard = [
+        [InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")]
+        for title in matches
+    ]
+
+    msg = await update.message.reply_text(
+        f"🔎 Found {len(matches)} matching movie(s):",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    user_last_bot_message[user_id] = msg.message_id
 
 async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_last(update.effective_user.id, context)
