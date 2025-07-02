@@ -20,7 +20,7 @@ from telegram.ext import (
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("BOT_TOKEN")
-FIREBASE_URL = os.getenv("FIREBASE_DB_URL")
+FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
 ADRINOLINKS_API_TOKEN = os.getenv("ADRINOLINKS_API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
