@@ -104,20 +104,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # /addmovie
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
+
     args = context.args
     if len(args) < 3:
         await update.message.reply_text("Usage:\n/addmovie Title Quality Link", parse_mode="Markdown")
         return
-    *title_parts, quality, link = args
+
+    title_parts = args[:-2]
+    quality = args[-2]
+    original_link = args[-1]
+    link = await shorten_link(original_link)
+
     title = "_".join(title_parts)
-    short_link = shorten_link(link)
     movie = get_movies().get(title, {})
-    movie[quality] = short_link
+    movie[quality] = link
     ref.child(title).set(movie)
+
     await update.message.reply_text(f"✅ Added *{title}* ({quality})", parse_mode="Markdown")
+
 
 # /removemovie
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
