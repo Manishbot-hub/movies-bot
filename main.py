@@ -38,13 +38,25 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 user_last_bot_message = {}
 
+API_URL = "https://adrinolinks.in/member/tools/api"  # ✅ Replace with actual Adrinolinks API URL
+
 async def shorten_link(link):
     async with httpx.AsyncClient() as client:
-        response = await client.post("https://adrinolinks/api", json={"url": link})
-        if response.status_code == 200:
-            return response.json().get('shortenedUrl')
-        else:
-            return link  # fallback
+        try:
+            response = await client.post(
+                API_URL,
+                headers={"Authorization": f"Bearer {ADRINOLINKS_API_TOKEN}"},
+                json={"url": link}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("shortenedUrl", link)  # ✅ Return shortened link or fallback
+            else:
+                logging.error(f"Adrinolinks API Error: {response.status_code} {response.text}")
+                return link  # fallback on error
+        except Exception as e:
+            logging.error(f"Shorten link failed: {e}")
+            return link  # fallback on exception
 
 
 def get_movies():
