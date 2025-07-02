@@ -202,7 +202,7 @@ async def load_bulk_from_txt(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         success = 0
         for line in lines:
-            parts = [p.strip() for p in line.split("|")]
+            parts = [p.strip() for p in line.split(",")]
             if len(parts) != 3:
                 continue
 
