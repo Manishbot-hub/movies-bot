@@ -5,7 +5,7 @@ from firebase_admin import credentials, db
 
 # Prevent double initialization of Firebase app
 if not firebase_admin._apps:
-    cred = credentials.Certificate(firebase_key)  # Or your Firebase JSON dict loaded from env
+    cred = credentials.Certificate(FIREBASE_KEY)  # Or your Firebase JSON dict loaded from env
     firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
