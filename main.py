@@ -277,7 +277,8 @@ app.add_handler(CommandHandler("removemovie", remove_movie))
 app.add_handler(CommandHandler("updatemovie", update_movie))
 app.add_handler(CommandHandler("admin", admin_panel))
 app.add_handler(CallbackQueryHandler(button))
-app.add_handler(CommandHandler("loadbulktxt", load_bulk_from_txt))
+app.add_handler(CommandHandler("uploadbulk", upload_bulk))
+
 
 # Launch FastAPI server
 if __name__ == "__main__":
