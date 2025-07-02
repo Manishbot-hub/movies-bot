@@ -1,20 +1,20 @@
 import os
 import json
-import asyncio
-import aiohttp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 import firebase_admin
 from firebase_admin import credentials, db
-from fastapi import FastAPI
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+import requests
+from fastapi import FastAPI, Request
 import uvicorn
 
-# Load Firebase credentials from environment
+# 🔑 Load Firebase credentials from env
 firebase_key = json.loads(os.getenv("FIREBASE_KEY"))
 FIREBASE_URL = os.getenv("FIREBASE_URL")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
+ADSHORT_API = os.getenv("ADSHORT_API")
 
 cred = credentials.Certificate(firebase_key)
 firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
@@ -23,177 +23,198 @@ ref = db.reference("movies")
 app = Application.builder().token(BOT_TOKEN).build()
 fastapi_app = FastAPI()
 
-async def shorten_link(original_link):
-    api_token = os.getenv("ADRINOLINKS_API_TOKEN")
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"https://adrinolinks.com/api?api={api_token}&url={original_link}") as resp:
-            data = await resp.json()
-            return data.get("shortenedUrl", original_link)
+# ✅ Link Shortener
+def shorten_link(original_link):
+    try:
+        response = requests.get(f"https://adrinolinks.com/api?api={ADSHORT_API}&url={original_link}")
+        data = response.json()
+        return data["shortenedUrl"] if data.get("status") == "success" else original_link
+    except Exception as e:
+        print(f"Link shortener error: {e}")
+        return original_link
 
+# ✅ Fetch all movies
 def get_movies():
     return ref.get() or {}
 
-@app.command_handler
+# ✅ /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome to *Movies Bot*!\n\nUse /search, /report, or other commands.", parse_mode="Markdown"
+        "👋 Welcome to Movie Bot!\n\n"
+        "Commands:\n"
+        "/search <keyword>\n"
+        "/addmovie <title> <quality> <link>\n"
+        "/removemovie <partial title>\n"
+        "/uploadbulk <bulk movies>\n"
+        "/report <movie title>\n"
+        "/admin (for admin list)"
     )
 
-@app.command_handler
+# ✅ /search
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage:\n/search keyword", parse_mode="Markdown")
-        return
-
-    keyword = " ".join(args).lower()
+    query = " ".join(context.args).lower()
     movies = get_movies()
-    found = []
-
-    for title, qualities in movies.items():
-        if keyword in title.lower():
-            links = "\n".join(f"- `{q}`: {l}" for q, l in qualities.items() if q != "reports")
-            found.append(f"*{title}*\n{links}")
-
-    if found:
-        await update.message.reply_text("\n\n".join(found), parse_mode="Markdown")
+    results = [title for title in movies if query in title.lower()]
+    if results:
+        buttons = [
+            [InlineKeyboardButton(title, callback_data=f"movie_{title}")]
+            for title in results
+        ]
+        await update.message.reply_text("🔎 Results:", reply_markup=InlineKeyboardMarkup(buttons))
     else:
-        await update.message.reply_text("❌ No matches found.")
+        await update.message.reply_text("❌ No matching movies found.")
 
-@app.command_handler
+# ✅ Inline button
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data.startswith("movie_"):
+        title = query.data.replace("movie_", "")
+        movies = get_movies()
+        text = f"*{title}*\n\n"
+        for quality, link in movies.get(title, {}).items():
+            text += f"🔗 *{quality}*: {link}\n"
+        await query.edit_message_text(text=text, parse_mode="Markdown")
+
+# ✅ /addmovie
 async def addmovie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
     args = context.args
     if len(args) < 3:
-        await update.message.reply_text("Usage:\n/addmovie Title Quality Link", parse_mode="Markdown")
+        await update.message.reply_text("Usage:\n/addmovie Title Quality Link")
         return
 
-    *title_parts, quality, original_link = args
-    title = " ".join(title_parts)
-    link = await shorten_link(original_link)
-
-    movie = get_movies().get(title, {})
+    *title_parts, quality, link = args
+    title = "_".join(title_parts)
+    link = shorten_link(link)
+    movies = get_movies()
+    movie = movies.get(title, {})
     movie[quality] = link
     ref.child(title).set(movie)
-
     await update.message.reply_text(f"✅ Added *{title}* ({quality})", parse_mode="Markdown")
 
-@app.command_handler
+# ✅ /uploadbulk
 async def uploadbulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    if not context.args:
-        await update.message.reply_text("❌ Send movie lines in this format:\n\nTitle | Quality | Link")
-        return
-
-    text = " ".join(context.args)
-    lines = text.split('\n')
+    lines = update.message.text.split("\n")[1:]
     added = 0
-
     for line in lines:
         try:
-            title, quality, original_link = [x.strip() for x in line.split('|')]
-            link = await shorten_link(original_link)
-            movie = get_movies().get(title, {})
-            movie[quality] = link
-            ref.child(title).set(movie)
-            added += 1
-        except Exception:
-            continue
+            parts = line.strip().split("|")
+            if len(parts) == 3:
+                title, quality, link = parts
+                title = title.strip()
+                quality = quality.strip()
+                link = shorten_link(link.strip())
+                movies = get_movies()
+                movie = movies.get(title, {})
+                movie[quality] = link
+                ref.child(title).set(movie)
+                added += 1
+        except Exception as e:
+            print(f"Bulk upload error: {e}")
 
-    await update.message.reply_text(f"✅ Bulk upload done. Added {added} movies.")
+    await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
 
-@app.command_handler
+# ✅ /removemovie
 async def removemovie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    if not context.args:
-        await update.message.reply_text("Usage:\n/removemovie keyword")
-        return
-
-    keyword = " ".join(context.args).lower()
+    query = " ".join(context.args).lower()
     movies = get_movies()
-    matches = [t for t in movies if keyword in t.lower()]
+    matches = [title for title in movies if query in title.lower()]
 
     if not matches:
-        await update.message.reply_text("❌ No movies matched.")
+        await update.message.reply_text("❌ No matching movies found.")
         return
 
     buttons = [
-        [InlineKeyboardButton(t, callback_data=f"del:{t}")] for t in matches
+        [InlineKeyboardButton(f"❌ {title}", callback_data=f"delete_{title}")]
+        for title in matches
     ]
-    await update.message.reply_text("Select movie to delete:", reply_markup=InlineKeyboardMarkup(buttons))
+    await update.message.reply_text(
+        "Select movie to delete:",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
 
+# ✅ Button delete movie
 @app.callback_query_handler
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_movie_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
-    if query.data.startswith("del:"):
-        title = query.data[4:]
+    if query.data.startswith("delete_"):
+        title = query.data.replace("delete_", "")
         ref.child(title).delete()
-        await query.edit_message_text(f"✅ Deleted *{title}*", parse_mode="Markdown")
+        await query.edit_message_text(f"✅ Deleted: *{title}*", parse_mode="Markdown")
 
-@app.command_handler
+# ✅ /report broken link
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
-        await update.message.reply_text("Usage:\n/report MovieTitle")
+        await update.message.reply_text("Usage:\n/report Movie Title")
         return
 
-    title = " ".join(context.args)
-    movie = get_movies().get(title)
+    report_text = " ".join(context.args)
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=f"🚩 *Broken Link Report*\n\nUser: {update.effective_user.username}\nMovie: {report_text}",
+        parse_mode="Markdown",
+    )
+    await update.message.reply_text("✅ Your report has been sent to admin.")
 
-    if not movie:
-        await update.message.reply_text("❌ Movie not found.")
-        return
-
-    reports = movie.get("reports", 0) + 1
-    movie["reports"] = reports
-    ref.child(title).set(movie)
-
-    await update.message.reply_text(f"✅ Report received for *{title}*.\n(Reports: {reports})", parse_mode="Markdown")
-
-@app.command_handler
+# ✅ /admin
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    cmds = [
-        "/addmovie Title Quality Link",
-        "/uploadbulk",
-        "/removemovie keyword",
-        "/admin",
-    ]
-    await update.message.reply_text("*Admin Commands:*\n\n" + "\n".join(cmds), parse_mode="Markdown")
+    await update.message.reply_text(
+        "**Admin Commands:**\n\n"
+        "/addmovie Title Quality Link\n"
+        "/uploadbulk\n"
+        "/removemovie Partial_Title\n"
+        "/report Movie_Title\n",
+        parse_mode="Markdown"
+    )
 
+# ✅ Register handlers
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("search", search))
+app.add_handler(CommandHandler("addmovie", addmovie))
+app.add_handler(CommandHandler("uploadbulk", uploadbulk))
+app.add_handler(CommandHandler("removemovie", removemovie))
+app.add_handler(CommandHandler("report", report))
+app.add_handler(CommandHandler("admin", admin))
+app.add_handler(CallbackQueryHandler(button))
+
+# ✅ FastAPI root check
 @fastapi_app.get("/")
 async def root():
     return {"status": "Bot is running"}
 
+# ✅ Webhook endpoint
 @fastapi_app.post("/webhook")
-async def webhook(req):
-    body = await req.body()
-    await app.process_update(Update.de_json(json.loads(body), app.bot))
+async def webhook(request: Request):
+    data = await request.json()
+    await app.process_update(Update.de_json(data, app.bot))
     return {"ok": True}
 
+# ✅ Startup webhook setup
 @fastapi_app.on_event("startup")
 async def on_startup():
     if not WEBHOOK_URL:
         raise ValueError("WEBHOOK_URL is not set.")
     await app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    print("✅ Webhook set.")
 
+# ✅ Uvicorn run
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", "8000"))
     uvicorn.run("main:fastapi_app", host="0.0.0.0", port=port)
