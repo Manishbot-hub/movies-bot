@@ -19,13 +19,13 @@ ADMIN_ID = 6301044201
 
 # Load environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-FIREBASE_URL = os.getenv("FIREBASE_DB_URL")
+FIREBASE_URL = os.getenv("FIREBASE_URL")
 ADRN_TOKEN = os.getenv("ADRIN_API_KEY")
 
 # Firebase Init
 firebase_key = json.loads(os.getenv("FIREBASE_KEY"))
 cred = credentials.Certificate(firebase_key)
-firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_DB_URL})
+firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
 ref = db.reference("movies")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
