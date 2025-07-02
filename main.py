@@ -33,26 +33,21 @@ if not BOT_TOKEN:
 ADMIN_ID = int(os.getenv("ADMIN_ID", "6301044201"))
 
 # Adrinolinks API Token
-ADRN_API_TOKEN = os.getenv("ADRN_API_TOKEN")
+import aiohttp
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-fastapi_app = FastAPI()
+async def shorten_link(original_link):
+    api_token = os.getenv("ADRINO_API")
+    api_url = f"https://adrinolinks.com/api?api={api_token}&url={original_link}"
 
-def get_movies():
-    try:
-        return ref.get() or {}
-    except Exception as e:
-        print("Firebase error:", e)
-        return {}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url) as response:
+            data = await response.json()
+            if data["status"] == "success":
+                return data["shortenedUrl"]
+            else:
+                print(f"Shortening failed: {data}")
+                return original_link
 
-def shorten_link(link):
-    try:
-        api_url = f"https://adrinolinks.com/api?api={ADRN_API_TOKEN}&url={link}"
-        response = requests.get(api_url).json()
-        return response.get("shortenedUrl", link)
-    except Exception as e:
-        print("Link Shortener Error:", e)
-        return link
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -117,7 +112,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_parts = args[:-2]
     quality = args[-2]
     original_link = args[-1]
-    link = await shorten_link(original_link)
+    link = await shorten_link(link)
 
     title = "_".join(title_parts)
     movie = get_movies().get(title, {})
