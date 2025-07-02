@@ -217,10 +217,16 @@ async def on_startup():
     await telegram_app.bot.set_webhook(webhook_url)
 
 @app.post("/webhook")
-async def telegram_webhook(req: Request):
-    data = await req.json()
+async def telegram_webhook(request: Request):
+    data = await request.json()
+
+    # ✅ Check if app is already initialized
+    if not telegram_app._initialized:
+        await telegram_app.initialize()
+
     await telegram_app.process_update(Update.de_json(data, telegram_app.bot))
-    return {"ok": True}
+    return {"status": "ok"}
+
 
 @app.get("/")
 async def root():
