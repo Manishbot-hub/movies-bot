@@ -25,9 +25,13 @@ FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
 ADRINOLINKS_API_TOKEN = os.getenv("ADRINOLINKS_API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-cred = credentials.Certificate(FIREBASE_KEY)
-firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
+# ✅ Prevent multiple Firebase initializations
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_KEY)
+    firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
+
 ref = db.reference("movies")
+
 
 app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
