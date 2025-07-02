@@ -3,10 +3,21 @@ import json
 import firebase_admin
 from firebase_admin import credentials, db
 
-# Prevent double initialization of Firebase app
+# Load Firebase credentials and URL from environment variables
+firebase_key_json = os.getenv("FIREBASE_KEY")
+firebase_url = os.getenv("FIREBASE_URL")
+
+if not firebase_key_json or not firebase_url:
+    raise ValueError("Missing FIREBASE_KEY or FIREBASE_URL in environment variables")
+
+# Parse the Firebase key JSON
+firebase_key = json.loads(firebase_key_json)
+
+# Initialize Firebase only if not already initialized
 if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_KEY)  # Or your Firebase JSON dict loaded from env
-    firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
+    cred = credentials.Certificate(firebase_key)
+    firebase_admin.initialize_app(cred, {"databaseURL": firebase_url})
+
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
