@@ -41,28 +41,36 @@ user_last_bot_message = {}
 
 
 
+
+
+
+
 API_KEY = ADRINOLINKS_API_TOKEN
 BASE_URL = "https://adrinolinks.in/st"
 
 async def shorten_link(link):
+    encoded_link = urllib.parse.quote(link, safe='')
     params = {
         "api": API_KEY,
-        "url": urllib.parse.quote(link, safe='')  # ✅ Proper URL encoding
+        "url": encoded_link
     }
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
             response = await client.get(BASE_URL, params=params)
-            logging.info(f"Shortener API status: {response.status_code}, Response: {response.text[:200]}")
 
-            if response.status_code == 200 and not response.text.startswith("<!DOCTYPE html>"):
-                short_url = response.text.strip()
-                return short_url
+            # ✅ Log response to help debug
+            logging.info(f"Shortener response status: {response.status_code}")
+            logging.info(f"Shortener final URL: {response.url}")
+
+            # ✅ Return the final redirected URL (which is the shortened link)
+            if response.status_code == 200 and "adrinolinks" in str(response.url):
+                return str(response.url)
             else:
-                logging.error(f"Shortener returned error page or bad response:\n{response.text}")
-                return link  # Return original link on error
+                logging.error(f"Shortener failed or returned unexpected result: {response.text[:200]}")
+                return link
         except Exception as e:
-            logging.error(f"Shortener exception: {e}")
+            logging.error(f"Shorten link error: {e}")
             return link
 
 def get_movies():
