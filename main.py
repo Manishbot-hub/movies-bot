@@ -204,7 +204,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
-@app.post("/webhook")
+@fastapi_app.post("/webhook")
 async def webhook(request: Request):
     try:
         data = await request.json()
