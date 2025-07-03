@@ -91,7 +91,6 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     i = 0
     while i < len(lines):
         try:
-<<<<<<< HEAD
             line = lines[i].strip()
             # Format 1: Single-line | Title | Quality | Link
             if '|' in line:
@@ -109,10 +108,6 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 i += 1
                 continue
-
-=======
-            title, quality, link = [x.strip() for x in line.split("|")]
->>>>>>> dbad7d4e18d446d91bb5d1a2d512450f8a878171
             short_link = await shorten_link(link)
             movie = get_movies().get(title, {})
             movie[quality] = short_link
@@ -122,14 +117,12 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             i += 1
             continue
 
-<<<<<<< HEAD
+
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
 
     
-=======
     await update.message.reply_text(f"\u2705 Bulk upload complete: {added} movies added.")
 
->>>>>>> dbad7d4e18d446d91bb5d1a2d512450f8a878171
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_last(user_id, context)
