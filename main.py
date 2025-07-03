@@ -105,23 +105,43 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not update.message.text:
-        await update.message.reply_text("Send movies in text: Title | Quality | Link (one per line)")
+        await update.message.reply_text("Send movies in text: Title | Quality | Link (one per line or two-line format)")
         return
 
-    lines = update.message.text.split("\n")
+    lines = update.message.text.strip().split("\n")
     added = 0
-    for line in lines:
+    i = 0
+    while i < len(lines):
         try:
-            title, quality, link = [x.strip() for x in line.split("|")]
-            short_link = await shorten_link(original_link)  # ✅ Correct
+            line = lines[i].strip()
+            # Format 1: Single-line | Title | Quality | Link
+            if '|' in line:
+                title, quality, link = [x.strip() for x in line.split("|", 2)]
+                i += 1
+            # Format 2: Two-line (Title/Quality on one, Link on next)
+            elif i + 1 < len(lines):
+                title_quality = lines[i].strip()
+                link = lines[i + 1].strip()
+                # Try to extract quality from last part of title_quality
+                parts = title_quality.split()
+                quality = parts[-1]
+                title = " ".join(parts[:-1])
+                i += 2
+            else:
+                i += 1
+                continue
+
+            short_link = await shorten_link(link)
             movie = get_movies().get(title, {})
             movie[quality] = short_link
             ref.child(title).set(movie)
             added += 1
         except:
+            i += 1
             continue
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
+
     
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
