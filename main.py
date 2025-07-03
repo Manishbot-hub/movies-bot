@@ -105,29 +105,33 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_last(user_id, context)
 
-    args = context.args
-    if not args:
-        msg = await update.message.reply_text("Usage:\n/search keyword")
-        user_last_bot_message[user_id] = msg.message_id
-        return
+    if update.message:
+        # For plain text search (from MessageHandler)
+        query = update.message.text.strip().lower()
+    else:
+        # For /search command with arguments
+        args = context.args
+        if not args:
+            msg = await update.message.reply_text("Usage:\n/search keyword")
+            user_last_bot_message[user_id] = msg.message_id
+            return
+        query = " ".join(args).lower()
 
-    query = " ".join(args).lower()
     movies = get_movies()
     matches = [title for title in movies if query in title.lower()]
 
     if not matches:
-        msg = await update.message.reply_text("\u274C No matching movies found.")
+        msg = await update.message.reply_text("❌ No matching movies found.")
         user_last_bot_message[user_id] = msg.message_id
         return
 
     keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")] for title in matches]
 
     msg = await update.message.reply_text(
-        f"\U0001F50E Found {len(matches)} matching movie(s):",
+        f"🔎 Found {len(matches)} matching movie(s):",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     user_last_bot_message[user_id] = msg.message_id
-
 async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_last(user_id, context)
