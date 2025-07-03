@@ -82,6 +82,24 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Not authorized.")
         return
 
+    # ✅ Handle inline arguments like: /uploadbulk Title Quality Link
+    args = context.args
+    if args and len(args) >= 3:
+        try:
+            *title_parts, quality, link = args
+            title = " ".join(title_parts).strip()
+            short_link = await shorten_link(link)
+            movie = get_movies().get(title, {})
+            movie[quality] = short_link
+            ref.child(title).set(movie)
+            await update.message.reply_text(f"✅ Uploaded *{title}* ({quality})", parse_mode="Markdown")
+            return
+        except Exception as e:
+            logging.error(f"Inline uploadbulk failed: {e}")
+            await update.message.reply_text("❌ Failed to parse inline upload. Please check format.")
+            return
+
+    # ✅ Handle bulk input from multi-line message
     if not update.message.text:
         await update.message.reply_text("Send movie lines like:\nTitle | Quality | Link OR two-line format.")
         return
@@ -102,7 +120,6 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif i + 1 < len(lines):
                 title_quality = line
                 link = lines[i + 1].strip()
-
                 parts = title_quality.strip().split()
                 quality = parts[-1]
                 title = " ".join(parts[:-1])
@@ -123,6 +140,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
+
 
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
