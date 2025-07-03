@@ -5,8 +5,6 @@ import asyncio
 import logging
 import firebase_admin
 from firebase_admin import credentials, db
-import requests
-
 from fastapi import FastAPI, Request
 import uvicorn
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -26,41 +24,21 @@ FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
 ADRINOLINKS_API_TOKEN = os.getenv("ADRINOLINKS_API_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-# ✅ Prevent multiple Firebase initializations
 if not firebase_admin._apps:
     cred = credentials.Certificate(FIREBASE_KEY)
     firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
 
 ref = db.reference("movies")
-
-
 app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
-user_last_bot_message = {}
 
-API_KEY = ADRINOLINKS_API_TOKEN  # From environment variable
-BASE_URL = "https://adrinolinks.in/st"
+user_last_bot_message = {}
+user_movie_offset = {}  # For pagination
+MOVIES_PER_PAGE = 10
 
 async def shorten_link(link):
-    params = {
-        "api": API_KEY,
-        "url": link
-    }
-
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        try:
-            response = await client.get(BASE_URL, params=params)
-            if response.status_code == 200:
-                short_url = response.text.strip()
-                logging.info(f"Shortened link: {short_url}")
-                return short_url
-            else:
-                logging.error(f"Shorten failed. Status: {response.status_code}, Response: {response.text}")
-                return link  # Return original link if API fails
-        except Exception as e:
-            logging.error(f"Shorten link failed: {e}")
-            return link  # Return original link if error
-
+    api_key = ADRINOLINKS_API_TOKEN
+    return f"https://adrinolinks.in/st?api={api_key}&url={link}"
 
 def get_movies():
     return ref.get() or {}
@@ -74,14 +52,14 @@ async def delete_last(user_id, context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_last(update.effective_user.id, context)
-    text = "👋 Welcome to Movies World! Use /addmovie, /uploadbulk, or /movies to browse."
+    text = "\U0001F44B Welcome to Movies World! Use /search to get your favourite movies🎦🎦, Type any movie name, or /movies to browse."
     msg = await update.message.reply_text(text)
     user_last_bot_message[update.effective_user.id] = msg.message_id
 
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ Not authorized.")
+        await update.message.reply_text("\u26D4 Not authorized.")
         return
 
     args = context.args
@@ -91,17 +69,17 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     *title_parts, quality, original_link = args
     title = "_".join(title_parts)
-    short_link = await shorten_link(original_link)  # ✅ FIXED HERE
+    short_link = await shorten_link(original_link)
     movie = get_movies().get(title, {})
-    movie[quality] = short_link  # ✅ FIXED HERE
+    movie[quality] = short_link
     ref.child(title).set(movie)
 
-    await update.message.reply_text(f"✅ Added *{title}* ({quality})", parse_mode="Markdown")
+    await update.message.reply_text(f"\u2705 Added *{title}* ({quality})", parse_mode="Markdown")
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ Not authorized.")
+        await update.message.reply_text("\u26D4 Not authorized.")
         return
 
     if not update.message.text:
@@ -113,6 +91,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     i = 0
     while i < len(lines):
         try:
+<<<<<<< HEAD
             line = lines[i].strip()
             # Format 1: Single-line | Title | Quality | Link
             if '|' in line:
@@ -131,6 +110,9 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 i += 1
                 continue
 
+=======
+            title, quality, link = [x.strip() for x in line.split("|")]
+>>>>>>> dbad7d4e18d446d91bb5d1a2d512450f8a878171
             short_link = await shorten_link(link)
             movie = get_movies().get(title, {})
             movie[quality] = short_link
@@ -140,54 +122,90 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             i += 1
             continue
 
+<<<<<<< HEAD
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
 
     
+=======
+    await update.message.reply_text(f"\u2705 Bulk upload complete: {added} movies added.")
+
+>>>>>>> dbad7d4e18d446d91bb5d1a2d512450f8a878171
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_last(user_id, context)
 
-    args = context.args
-    if not args:
-        msg = await update.message.reply_text("Usage:\n/search keyword")
-        user_last_bot_message[user_id] = msg.message_id
-        return
+    # Get the search query from text or command
+    if update.message:
+        query = update.message.text.strip().lower()
+    else:
+        args = context.args
+        if not args:
+            msg = await update.message.reply_text("Usage:\n/search keyword")
+            user_last_bot_message[user_id] = msg.message_id
+            return
+        query = " ".join(args).strip().lower()
 
-    query = " ".join(args).lower()
     movies = get_movies()
-    matches = [title for title in movies if query in title.lower()]
+    normalized = {title: title.replace("_", " ").lower() for title in movies}
 
-    if not matches:
+    # First try substring matching
+    substring_matches = [
+        key for key, name in normalized.items() if query in name
+    ]
+
+    # If no substring match, try fuzzy match
+    fuzzy_matches = []
+    if not substring_matches:
+        all_titles = list(normalized.values())
+        close_titles = difflib.get_close_matches(query, all_titles, n=10, cutoff=0.5)
+        fuzzy_matches = [
+            key for key, name in normalized.items() if name in close_titles
+        ]
+
+    final_matches = substring_matches or fuzzy_matches
+
+    if not final_matches:
         msg = await update.message.reply_text("❌ No matching movies found.")
         user_last_bot_message[user_id] = msg.message_id
         return
 
     keyboard = [
-        [InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")]
-        for title in matches
+        [InlineKeyboardButton(key.replace("_", " "), callback_data=f"movie|{key}")]
+        for key in final_matches
     ]
 
     msg = await update.message.reply_text(
-        f"🔎 Found {len(matches)} matching movie(s):",
+        f"🔍 Found {len(final_matches)} matching movie(s):",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     user_last_bot_message[user_id] = msg.message_id
-
 async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await delete_last(update.effective_user.id, context)
-    movies = get_movies()
-    if not movies:
-        msg = await update.message.reply_text("📭 No movies found.")
-        user_last_bot_message[update.effective_user.id] = msg.message_id
-        return
+    user_id = update.effective_user.id
+    await delete_last(user_id, context)
+    user_movie_offset[user_id] = 0
+    await show_movie_page(user_id, context, update.message.reply_text)
 
-    text = "🎬 *Movies List:*\n\n"
-    keyboard = []
-    for title in movies.keys():
-        keyboard.append([InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")])
+async def show_movie_page(user_id, context, send_func):
+    movies = list(get_movies().keys())
+    offset = user_movie_offset.get(user_id, 0)
+    end = offset + MOVIES_PER_PAGE
+    current_page = movies[offset:end]
 
-    msg = await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
-    user_last_bot_message[update.effective_user.id] = msg.message_id
+    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")] for title in current_page]
+
+    nav_buttons = []
+    if offset > 0:
+        nav_buttons.append(InlineKeyboardButton("◀ Back", callback_data=f"back|{offset - MOVIES_PER_PAGE}"))
+    if end < len(movies):
+        nav_buttons.append(InlineKeyboardButton("▶ Show More", callback_data=f"more|{end}"))
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+
+    msg = await send_func(
+        f"\U0001F3AC Showing movies {offset + 1} to {min(end, len(movies))} of {len(movies)}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    user_last_bot_message[user_id] = msg.message_id
 
 async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -197,15 +215,13 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _, title = query.data.split("|", 1)
     movie = get_movies().get(title)
     if not movie:
-        msg = await query.message.reply_text("❌ Movie not found.")
+        msg = await query.message.reply_text("\u274C Movie not found.")
         user_last_bot_message[query.from_user.id] = msg.message_id
         return
 
     text = f"*{title.replace('_', ' ')}*\n\n"
-    buttons = []
-    for quality, link in movie.items():
-        buttons.append([InlineKeyboardButton(f"{quality} 🔗", url=link)])
-    buttons.append([InlineKeyboardButton("⚠️ Report Broken Link", callback_data=f"report|{title}")])
+    buttons = [[InlineKeyboardButton(f"{quality} \U0001F517", url=link)] for quality, link in movie.items()]
+    buttons.append([InlineKeyboardButton("\u26A0\uFE0F Report Broken Link", callback_data=f"report|{title}")])
 
     msg = await query.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
     user_last_bot_message[query.from_user.id] = msg.message_id
@@ -213,7 +229,7 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ Not authorized.")
+        await update.message.reply_text("\u26D4 Not authorized.")
         return
 
     args = context.args
@@ -226,7 +242,7 @@ async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matches = [t for t in movies if query in t.lower()]
 
     if not matches:
-        await update.message.reply_text("❌ No matching movies.")
+        await update.message.reply_text("\u274C No matching movies.")
         return
 
     keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"delete|{title}")] for title in matches]
@@ -240,15 +256,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("delete|"):
         _, title = query.data.split("|", 1)
         ref.child(title).delete()
-        await query.edit_message_text(f"✅ Movie *{title.replace('_',' ')}* deleted.", parse_mode="Markdown")
+        await query.edit_message_text(f"\u2705 Movie *{title.replace('_',' ')}* deleted.", parse_mode="Markdown")
 
     elif query.data.startswith("movie|"):
         await show_movie(update, context)
 
     elif query.data.startswith("report|"):
         _, title = query.data.split("|", 1)
-        logging.warning(f"⚠️ User {user_id} reported broken link for movie: {title}")
-        await query.edit_message_text("✅ Thanks for reporting! Admin will review.")
+        logging.warning(f"\u26A0\uFE0F User {user_id} reported broken link for movie: {title}")
+        await query.edit_message_text("\u2705 Thanks for reporting! Admin will review.")
+
+    elif query.data.startswith("more|"):
+        _, new_offset = query.data.split("|", 1)
+        user_movie_offset[user_id] = int(new_offset)
+        await delete_last(user_id, context)
+        await show_movie_page(user_id, context, query.message.reply_text)
+
+    elif query.data.startswith("back|"):
+        _, new_offset = query.data.split("|", 1)
+        user_movie_offset[user_id] = max(0, int(new_offset))
+        await delete_last(user_id, context)
+        await show_movie_page(user_id, context, query.message.reply_text)
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -270,7 +298,8 @@ telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
 telegram_app.add_handler(CommandHandler("search", search_movie))
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, list_movies))
+telegram_app.add_handler(CommandHandler("movies", list_movies))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
 @app.on_event("startup")
@@ -283,14 +312,10 @@ async def on_startup():
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     data = await request.json()
-
-    # ✅ Check if app is already initialized
     if not telegram_app._initialized:
         await telegram_app.initialize()
-
     await telegram_app.process_update(Update.de_json(data, telegram_app.bot))
     return {"status": "ok"}
-
 
 @app.get("/")
 async def root():
