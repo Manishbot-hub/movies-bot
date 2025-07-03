@@ -52,7 +52,7 @@ async def delete_last(user_id, context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_last(update.effective_user.id, context)
-    text = "\U0001F44B Welcome to Movies World! Use /search to get you favourite movies  or /movies to browse."
+    text = "\U0001F44B Welcome to Movies World! Use /addmovie, /uploadbulk, or /movies to browse."
     msg = await update.message.reply_text(text)
     user_last_bot_message[update.effective_user.id] = msg.message_id
 
@@ -142,8 +142,13 @@ async def show_movie_page(user_id, context, send_func):
 
     keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")] for title in current_page]
 
+    nav_buttons = []
+    if offset > 0:
+        nav_buttons.append(InlineKeyboardButton("◀ Back", callback_data=f"back|{offset - MOVIES_PER_PAGE}"))
     if end < len(movies):
-        keyboard.append([InlineKeyboardButton("▶ Show More", callback_data=f"more|{end}")])
+        nav_buttons.append(InlineKeyboardButton("▶ Show More", callback_data=f"more|{end}"))
+    if nav_buttons:
+        keyboard.append(nav_buttons)
 
     msg = await send_func(
         f"\U0001F3AC Showing movies {offset + 1} to {min(end, len(movies))} of {len(movies)}",
@@ -213,6 +218,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("more|"):
         _, new_offset = query.data.split("|", 1)
         user_movie_offset[user_id] = int(new_offset)
+        await delete_last(user_id, context)
+        await show_movie_page(user_id, context, query.message.reply_text)
+
+    elif query.data.startswith("back|"):
+        _, new_offset = query.data.split("|", 1)
+        user_movie_offset[user_id] = max(0, int(new_offset))
         await delete_last(user_id, context)
         await show_movie_page(user_id, context, query.message.reply_text)
 
