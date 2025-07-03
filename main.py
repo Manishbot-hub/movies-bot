@@ -105,30 +105,48 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_last(user_id, context)
 
+    # Get the search query from text or command
     if update.message:
-        # For plain text search (from MessageHandler)
         query = update.message.text.strip().lower()
     else:
-        # For /search command with arguments
         args = context.args
         if not args:
             msg = await update.message.reply_text("Usage:\n/search keyword")
             user_last_bot_message[user_id] = msg.message_id
             return
-        query = " ".join(args).lower()
+        query = " ".join(args).strip().lower()
 
     movies = get_movies()
-    matches = [title for title in movies if query in title.lower()]
+    normalized = {title: title.replace("_", " ").lower() for title in movies}
 
-    if not matches:
+    # First try substring matching
+    substring_matches = [
+        key for key, name in normalized.items() if query in name
+    ]
+
+    # If no substring match, try fuzzy match
+    fuzzy_matches = []
+    if not substring_matches:
+        all_titles = list(normalized.values())
+        close_titles = difflib.get_close_matches(query, all_titles, n=10, cutoff=0.5)
+        fuzzy_matches = [
+            key for key, name in normalized.items() if name in close_titles
+        ]
+
+    final_matches = substring_matches or fuzzy_matches
+
+    if not final_matches:
         msg = await update.message.reply_text("❌ No matching movies found.")
         user_last_bot_message[user_id] = msg.message_id
         return
 
-    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")] for title in matches]
+    keyboard = [
+        [InlineKeyboardButton(key.replace("_", " "), callback_data=f"movie|{key}")]
+        for key in final_matches
+    ]
 
     msg = await update.message.reply_text(
-        f"🔎 Found {len(matches)} matching movie(s):",
+        f"🔍 Found {len(final_matches)} matching movie(s):",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     user_last_bot_message[user_id] = msg.message_id
