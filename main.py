@@ -79,49 +79,51 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("\u26D4 Not authorized.")
+        await update.message.reply_text("⛔ Not authorized.")
         return
 
     if not update.message.text:
-        await update.message.reply_text("Send movies in text: Title | Quality | Link (one per line or two-line format)")
+        await update.message.reply_text("Send movie lines like:\nTitle | Quality | Link OR two-line format.")
         return
 
     lines = update.message.text.strip().split("\n")
     added = 0
     i = 0
+
     while i < len(lines):
+        line = lines[i].strip()
+
         try:
-            line = lines[i].strip()
-            # Format 1: Single-line | Title | Quality | Link
+            # Format 1: Single-line with |
             if '|' in line:
                 title, quality, link = [x.strip() for x in line.split("|", 2)]
                 i += 1
-            # Format 2: Two-line (Title/Quality on one, Link on next)
+            # Format 2: Title line + link line
             elif i + 1 < len(lines):
-                title_quality = lines[i].strip()
+                title_quality = line
                 link = lines[i + 1].strip()
-                # Try to extract quality from last part of title_quality
-                parts = title_quality.split()
+
+                parts = title_quality.strip().split()
                 quality = parts[-1]
                 title = " ".join(parts[:-1])
                 i += 2
             else:
                 i += 1
                 continue
+
             short_link = await shorten_link(link)
             movie = get_movies().get(title, {})
             movie[quality] = short_link
             ref.child(title).set(movie)
             added += 1
-        except:
+
+        except Exception as e:
+            logging.warning(f"Failed to upload line {i}: {e}")
             i += 1
             continue
 
-
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
 
-    
-    await update.message.reply_text(f"\u2705 Bulk upload complete: {added} movies added.")
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
