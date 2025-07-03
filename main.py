@@ -248,7 +248,7 @@ telegram_app.add_handler(CommandHandler("search", search_movie))
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, list_movies))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
 @app.on_event("startup")
