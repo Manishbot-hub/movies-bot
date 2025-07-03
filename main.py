@@ -55,7 +55,7 @@ async def delete_last(user_id, context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_last(update.effective_user.id, context)
-    text = "👋 Welcome to Movies World! Use /search, or /movies to browse."
+    text = "👋 Welcome to Movies World! Use /search to find your favourite movies🎦🎦."
     msg = await update.message.reply_text(text)
     user_last_bot_message[update.effective_user.id] = msg.message_id
 
