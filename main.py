@@ -82,64 +82,42 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    # ✅ Handle inline arguments like: /uploadbulk Title Quality Link
-    args = context.args
-    if args and len(args) >= 3:
-        try:
-            *title_parts, quality, link = args
-            title = " ".join(title_parts).strip()
-            short_link = await shorten_link(link)
-            movie = get_movies().get(title, {})
-            movie[quality] = short_link
-            ref.child(title).set(movie)
-            await update.message.reply_text(f"✅ Uploaded *{title}* ({quality})", parse_mode="Markdown")
-            return
-        except Exception as e:
-            logging.error(f"Inline uploadbulk failed: {e}")
-            await update.message.reply_text("❌ Failed to parse inline upload. Please check format.")
-            return
-
-    # ✅ Handle bulk input from multi-line message
     if not update.message.text:
-        await update.message.reply_text("Send movie lines like:\nTitle | Quality | Link OR two-line format.")
+        await update.message.reply_text("Please paste movie data like:\nTitle (Year) Quality\nLink")
         return
 
     lines = update.message.text.strip().split("\n")
     added = 0
     i = 0
 
-    while i < len(lines):
-        line = lines[i].strip()
+    while i < len(lines) - 1:
+        title_quality_line = lines[i].strip()
+        link_line = lines[i + 1].strip()
 
         try:
-            # Format 1: Single-line with |
-            if '|' in line:
-                title, quality, link = [x.strip() for x in line.split("|", 2)]
-                i += 1
-            # Format 2: Title line + link line
-            elif i + 1 < len(lines):
-                title_quality = line
-                link = lines[i + 1].strip()
-                parts = title_quality.strip().split()
-                quality = parts[-1]
-                title = " ".join(parts[:-1])
-                i += 2
-            else:
-                i += 1
-                continue
+            # Extract quality from the last word, rest is title
+            parts = title_quality_line.split()
+            if len(parts) < 2:
+                raise ValueError("Not enough words for title and quality.")
+            quality = parts[-1]
+            title = " ".join(parts[:-1])
 
-            short_link = await shorten_link(link)
+            # Shorten link
+            short_link = await shorten_link(link_line)
+
+            # Save to Firebase
             movie = get_movies().get(title, {})
             movie[quality] = short_link
             ref.child(title).set(movie)
-            added += 1
 
+            added += 1
+            i += 2  # Move to next pair
         except Exception as e:
-            logging.warning(f"Failed to upload line {i}: {e}")
-            i += 1
-            continue
+            logging.warning(f"Skipping invalid entry at lines {i}-{i+1}: {e}")
+            i += 1  # Skip to next line
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
+
 
 
 
