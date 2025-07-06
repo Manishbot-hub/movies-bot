@@ -99,64 +99,32 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"\u2705 Added *{title}* ({quality})", parse_mode="Markdown")
 
 
-async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # only admin
-    if update.effective_user.id != ADMIN_ID:
-        return await update.message.reply_text("⛔ Not authorized.")
-    
-    text = update.message.text or ""
-    lines = text.splitlines()
-    # strip off the command itself
-    if lines and lines[0].startswith("/uploadbulk"):
-        lines = lines[1:]
-    
+
+
+LINE_RE = re.compile(r"^(.+?)\s+(\d+p)\s+(https?://\S+)$")
+
+async def upload_bulk(update, context):
+    lines = update.message.text.splitlines()[1:]
     added = 0
-    i = 0
-    total = len(lines)
-    logging.info(f"Bulk upload: {total} lines to process")
-    
-    while i < total:
-        line = lines[i].strip()
-        # Try single‑line: Title Quality URL
-        parts = line.split()
-        if len(parts) >= 3 and parts[-1].startswith("http"):
-            title   = " ".join(parts[:-2])
-            quality = parts[-2]
-            url     = parts[-1]
-            i += 1
-        # Otherwise two‑line: "Title Quality" then next line is URL
-        elif i + 1 < total and lines[i+1].strip().startswith("http"):
-            tparts = line.rsplit(" ", 1)
-            if len(tparts) != 2:
-                logging.warning(f"⚠️ Can't parse title/quality at line {i}: {line}")
-                i += 1
-                continue
-            title, quality = tparts
-            url = lines[i+1].strip()
-            i += 2
-        else:
-            logging.warning(f"⚠️ Unrecognized format at line {i}: {line}")
-            i += 1
+
+    for idx, line in enumerate(lines):
+        m = LINE_RE.match(line.strip())
+        if not m:
+            logging.warning(f"⚠️ Bad format on line {idx}: {line}")
             continue
 
-        # sanitize firebase key
+        title, quality, url = m.groups()
         safe_title = clean_firebase_key(title)
-        if not safe_title:
-            logging.warning(f"⚠️ Empty title after sanitization: '{title}'")
-            continue
+        short_url = await asyncio.to_thread(_shorten_url_sync, url)
 
-        try:
-            # shorten off main thread
-            short_url = await asyncio.to_thread(_shorten_url_sync, url)
-            movie = get_movies().get(safe_title, {})
-            movie[quality] = short_url
-            ref.child(safe_title).set(movie)
-            added += 1
-            logging.info(f"➕ Added '{title}' [{quality}] → {short_url}")
-        except Exception as e:
-            logging.warning(f"⚠️ Failed saving '{title}': {e}")
+        movie = get_movies().get(safe_title, {})
+        movie[quality] = short_url
+        ref.child(safe_title).set(movie)
+        added += 1
+        logging.info(f"➕ Added {title} [{quality}]")
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
