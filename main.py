@@ -47,15 +47,25 @@ def clean_firebase_key(key: str) -> str:
 def _shorten_url_sync(link: str) -> str:
     """Synchronously call ShrinkMe to shorten a link."""
     url = f"https://shrinkme.io/st?api={SHRINKME_API}&url={link}"
+    logging.info(f"Shortener called: {url}")
+
     try:
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
-        data = resp.json()
-        if data.get("status") == "success" and data.get("shortenedUrl"):
-            return data["shortenedUrl"]
-    except Exception:
-        logging.info("Shortener called:", url)
-    return link
+
+        try:
+            data = resp.json()
+            logging.info(f"Shortener response: {data}")
+            if data.get("status") == "success" and data.get("shortenedUrl"):
+                return data["shortenedUrl"]
+        except json.JSONDecodeError:
+            logging.warning("Shortener response was not JSON. Response text: %s", resp.text)
+
+    except Exception as e:
+        logging.warning(f"Shortener request failed: {e}")
+
+    return link  # fallback
+
 
 async def shorten_link(link: str) -> str:
     """Async wrapper: runs the sync function in a thread."""
