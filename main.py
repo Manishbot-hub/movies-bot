@@ -83,15 +83,10 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not update.message.text:
-        await update.message.reply_text("❗ Send multi-line movie data like:\nTitle Quality\nLink\n(repeat)")
+        await update.message.reply_text("❌ Please send movie lines like:\nTitle Quality\nLink\n(repeat for more).")
         return
 
-    lines = update.message.text.strip().split("\n")
-
-    # ✅ Skip /uploadbulk from first line if present
-    if lines[0].lower().startswith("/uploadbulk"):
-        lines = lines[1:]
-
+    lines = update.message.text.strip().split('\n')[1:]  # Skip the '/uploadbulk' command itself
     added = 0
     i = 0
 
@@ -99,41 +94,29 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title_line = lines[i].strip()
         link_line = lines[i + 1].strip()
 
-        if not title_line or not link_line:
-            i += 2
-            continue
-
+        # Try parsing
         try:
-            # Split title and quality
-            parts = title_line.rsplit(" ", 1)
-            if len(parts) != 2:
-                logging.warning(f"❌ Skipped: couldn't split quality from '{title_line}'")
+            parts = title_line.strip().split()
+            if len(parts) < 2:
                 i += 2
                 continue
 
-            title = parts[0].strip()
-            quality = parts[1].strip()
-            link = link_line
+            quality = parts[-1]
+            title = " ".join(parts[:-1])
 
-            # Shorten link
-            short_link = await shorten_link(original_link)
-            print(f"Shortened: {short_link}")
-
-
-            # Save to Firebase
+            short_link = await shorten_link(link_line)
             movie = get_movies().get(title, {})
             movie[quality] = short_link
             ref.child(title).set(movie)
-
             added += 1
 
         except Exception as e:
-            logging.warning(f"⚠️ Error parsing movie at line {i}: {e}")
-            pass  # skip and move on
+            logging.warning(f"⚠️ Failed to process lines {i} and {i+1}: {e}")
 
-        i += 2  # move to next title-link pair
+        i += 2  # Move to next pair
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
