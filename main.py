@@ -88,55 +88,44 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    text = update.message.text
-    if not text:
-        await update.message.reply_text("❌ Please send movie lines like:\nTitle Quality\nLink\n(repeat for more).")
+    if not update.message.text:
+        await update.message.reply_text("❌ Please send lines like:\nTitle Quality\nLink\n(repeat for each movie).")
         return
 
-    lines = text.strip().split('\n')
-    if not lines or len(lines) < 3:
-        await update.message.reply_text("❌ Not enough lines to parse.")
-        return
+    lines = update.message.text.strip().split('\n')
+    if lines[0].startswith("/uploadbulk"):
+        lines = lines[1:]  # skip command line
 
     added = 0
-    i = 1  # skip /uploadbulk
+    i = 0
+
     while i < len(lines) - 1:
-        title_line = lines[i].strip()
-        link_line = lines[i + 1].strip()
-        i += 2
-
         try:
-            parts = title_line.split()
-            if len(parts) < 2:
-                continue  # skip if title line is malformed
+            title_quality_line = lines[i].strip()
+            link_line = lines[i + 1].strip()
 
-            quality = parts[-1]
-            title = " ".join(parts[:-1]).strip()
-
-            if not title or not quality or not link_line:
+            # Split from the end to get quality
+            parts = title_quality_line.rsplit(" ", 1)
+            if len(parts) != 2:
+                i += 2
                 continue
+
+            title = parts[0].strip()
+            quality = parts[1].strip()
 
             safe_title = clean_firebase_key(title)
-            if not safe_title:
-                continue
-
             short_link = await shorten_link(link_line)
+
             movie = get_movies().get(safe_title, {})
             movie[quality] = short_link
             ref.child(safe_title).set(movie)
+
             added += 1
-
         except Exception as e:
-            logging.warning(f"⚠️ Failed to process line pair: {e}")
-            continue
-        logging.info(f"Title: {title}, Quality: {quality}, Link: {link_line}")
-        logging.info(f"Safe Firebase Key: {safe_title}")
-
+            logging.warning(f"⚠️ Failed to process lines {i} and {i+1}: {e}")
+        i += 2  # Move to the next pair
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
-
-
-
 
 
 
