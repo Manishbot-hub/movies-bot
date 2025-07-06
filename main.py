@@ -83,40 +83,52 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not update.message.text:
-        await update.message.reply_text("Please paste movie data like:\nTitle (Year) Quality\nLink")
+        await update.message.reply_text("Send message like:\nTitle Quality\nLink\n(Repeat...)")
         return
 
     lines = update.message.text.strip().split("\n")
+
+    # ✅ Remove /uploadbulk from first line
+    if lines[0].strip().lower().startswith("/uploadbulk"):
+        lines = lines[1:]
+
     added = 0
     i = 0
 
     while i < len(lines) - 1:
-        title_quality_line = lines[i].strip()
-        link_line = lines[i + 1].strip()
-
         try:
-            # Extract quality from the last word, rest is title
-            parts = title_quality_line.split()
+            title_quality = lines[i].strip()
+            link = lines[i + 1].strip()
+
+            # Skip empty lines
+            if not title_quality or not link:
+                i += 2
+                continue
+
+            parts = title_quality.split()
             if len(parts) < 2:
-                raise ValueError("Not enough words for title and quality.")
+                i += 2
+                continue
+
             quality = parts[-1]
             title = " ".join(parts[:-1])
 
-            # Shorten link
-            short_link = await shorten_link(link_line)
+            # 🔗 Auto shorten
+            short_link = await shorten_link(original_link)
 
-            # Save to Firebase
+            # 🔄 Save to Firebase
             movie = get_movies().get(title, {})
             movie[quality] = short_link
             ref.child(title).set(movie)
 
             added += 1
-            i += 2  # Move to next pair
-        except Exception as e:
-            logging.warning(f"Skipping invalid entry at lines {i}-{i+1}: {e}")
-            i += 1  # Skip to next line
+            i += 2
 
-    await update.message.reply_text(f"✅ Bulk upload complete: {added} movies added.")
+        except Exception as e:
+            logging.warning(f"❌ Skipped line {i}: {e}")
+            i += 2
+
+    await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
 
 
 
