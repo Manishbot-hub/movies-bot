@@ -100,53 +100,64 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # only admin
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
-
-    # grab all lines, drop the command itself if present
-    lines = update.message.text.splitlines()
+    
+    text = update.message.text or ""
+    lines = text.splitlines()
+    # strip off the command itself
     if lines and lines[0].startswith("/uploadbulk"):
         lines = lines[1:]
-
+    
     added = 0
     i = 0
-    while i < len(lines):
+    total = len(lines)
+    logging.info(f"Bulk upload: {total} lines to process")
+    
+    while i < total:
         line = lines[i].strip()
-        # try one‑line: Title Quality URL
-        one = line.split()
-        if len(one) >= 3 and one[-1].startswith("http"):
-            # last token is URL, second‑last is quality
-            quality = one[-2]
-            title   = " ".join(one[:-2])
-            url     = one[-1]
+        # Try single‑line: Title Quality URL
+        parts = line.split()
+        if len(parts) >= 3 and parts[-1].startswith("http"):
+            title   = " ".join(parts[:-2])
+            quality = parts[-2]
+            url     = parts[-1]
             i += 1
-        # else, try two‑line: Title Quality \n URL
-        elif i + 1 < len(lines):
-            parts = line.rsplit(" ", 1)
-            if len(parts) == 2 and lines[i+1].startswith("http"):
-                title, quality = parts
-                url = lines[i+1].strip()
-                i += 2
-            else:
-                logging.warning(f"⚠️ Can't parse block starting at line {i}: {line}")
+        # Otherwise two‑line: "Title Quality" then next line is URL
+        elif i + 1 < total and lines[i+1].strip().startswith("http"):
+            tparts = line.rsplit(" ", 1)
+            if len(tparts) != 2:
+                logging.warning(f"⚠️ Can't parse title/quality at line {i}: {line}")
                 i += 1
                 continue
+            title, quality = tparts
+            url = lines[i+1].strip()
+            i += 2
         else:
-            logging.warning(f"⚠️ Can't parse line {i}: {line}")
+            logging.warning(f"⚠️ Unrecognized format at line {i}: {line}")
             i += 1
             continue
 
+        # sanitize firebase key
+        safe_title = clean_firebase_key(title)
+        if not safe_title:
+            logging.warning(f"⚠️ Empty title after sanitization: '{title}'")
+            continue
+
         try:
+            # shorten off main thread
             short_url = await asyncio.to_thread(_shorten_url_sync, url)
-            safe     = clean_firebase_key(title)
-            movie    = get_movies().get(safe, {})
+            movie = get_movies().get(safe_title, {})
             movie[quality] = short_url
-            ref.child(safe).set(movie)
+            ref.child(safe_title).set(movie)
             added += 1
+            logging.info(f"➕ Added '{title}' [{quality}] → {short_url}")
         except Exception as e:
-            logging.warning(f"⚠️ Failed to save '{title}': {e}")
+            logging.warning(f"⚠️ Failed saving '{title}': {e}")
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
