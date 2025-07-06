@@ -1,4 +1,5 @@
 import os
+import re
 import httpx
 import json
 import asyncio
@@ -35,6 +36,10 @@ telegram_app = Application.builder().token(TOKEN).build()
 user_last_bot_message = {}
 user_movie_offset = {}  # For pagination
 MOVIES_PER_PAGE = 10
+
+def clean_firebase_key(key: str) -> str:
+    """Sanitize Firebase keys by replacing disallowed characters."""
+    return re.sub(r'[.#$/\[\]]', '_', key)
 
 async def shorten_link(link):
     api_key = ADRINOLINKS_API_TOKEN
@@ -76,9 +81,6 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"\u2705 Added *{title}* ({quality})", parse_mode="Markdown")
 
-def clean_firebase_key(key: str) -> str:
-    import re
-    return re.sub(r'[.#$/\[\]]', '_', key)
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -113,6 +115,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             safe_title = clean_firebase_key(title)
             ref.child(safe_title).set(movie)
+
             added += 1
 
         except Exception as e:
