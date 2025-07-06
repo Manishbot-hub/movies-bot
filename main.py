@@ -41,9 +41,12 @@ def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
     return re.sub(r'[.#$/\[\]]', '_', key)
 
-async def shorten_link(link):
-    api_key = ADRINOLINKS_API_TOKEN
-    return f"https://adrinolinks.in/st?api={api_key}&url={link}"
+def _shorten_url_sync(link):
+    api = ADRINOLINKS_API_TOKEN
+    resp = requests.get(f"https://adrinolinks.in/st?api={api}&url={link}", timeout=5)
+    data = resp.json()
+    return data.get("shortenedUrl") if data.get("status")=="success" else link
+
 
 def get_movies():
     return ref.get() or {}
@@ -74,7 +77,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     *title_parts, quality, original_link = args
     title = "_".join(title_parts)
-    short_link = await shorten_link(original_link)
+    short_link = await asyncio.to_thread(_shorten_url_sync, original_link)
     movie = get_movies().get(title, {})
     movie[quality] = short_link
     ref.child(title).set(movie)
@@ -88,40 +91,42 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("⛔ Not authorized.")
 
     text = update.message.text or ""
-    lines = text.strip().split("\n")
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    # drop the command itself
     if lines and lines[0].startswith("/uploadbulk"):
         lines = lines[1:]
 
     added = 0
     i = 0
     while i < len(lines) - 1:
-        title_quality = lines[i].strip()
-        link_line = lines[i+1].strip()
+        title_line = lines[i]
+        link_line  = lines[i + 1]
+
         try:
-            # split off the last "word" as quality
-            parts = title_quality.rsplit(" ", 1)
+            # last token in the title line is the quality
+            parts = title_line.rsplit(" ", 1)
             if len(parts) != 2:
-                raise ValueError("Can't parse title and quality")
+                raise ValueError(f"can't parse: {title_line!r}")
+            raw_title, quality = parts
+            safe_key = clean_firebase_key(raw_title)
+            if not safe_key:
+                raise ValueError("empty title after cleaning")
 
-            title, quality = parts
-            safe_title = clean_firebase_key(title)
-            if not safe_title:
-                raise ValueError("Empty title after sanitization")
+            # offload the HTTP call in a thread to avoid 'never awaited'
+            short_link = await asyncio.to_thread(_shorten_url_sync, link_line)
 
-            # shorten link off the main thread
-            short_link = await asyncio.to_thread(shorten_link, link_line)
-
-            movie = get_movies().get(safe_title, {})
+            movie = get_movies().get(safe_key, {})
             movie[quality] = short_link
-            ref.child(safe_title).set(movie)
+            ref.child(safe_key).set(movie)
             added += 1
 
         except Exception as e:
-            logging.warning(f"⚠️ Failed to process lines {i}/{i+1}: {e}")
+            logging.warning(f"⚠️ Failed lines {i}/{i+1}: {e}")
 
         i += 2
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
