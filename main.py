@@ -42,11 +42,24 @@ def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
     return re.sub(r'[.#$/\[\]]', '_', key)
 
-def _shorten_url_sync(link):
+import requests
+
+def _shorten_url_sync(link: str) -> str:
     api = ADRINOLINKS_API_TOKEN
-    resp = requests.get(f"https://adrinolinks.in/st?api={api}&url={link}", timeout=5)
-    data = resp.json()
-    return data.get("shortenedUrl") if data.get("status")=="success" else link
+    url = f"https://adrinolinks.in/st?api={api}&url={link}"
+    try:
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == "success" and data.get("shortenedUrl"):
+            return data["shortenedUrl"]
+    except ValueError:
+        # non‑JSON response
+        logging.warning("Shortener returned non‑JSON, using original link")
+    except Exception as e:
+        logging.warning(f"Shortener error: {e}")
+    return link
+
 
 
 def get_movies():
@@ -87,39 +100,54 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    text = update.message.text or ""
-    # strip off the command itself if present
-    lines = text.split("\n")
+    # grab all lines, drop the command itself if present
+    lines = update.message.text.splitlines()
     if lines and lines[0].startswith("/uploadbulk"):
         lines = lines[1:]
+
     added = 0
     i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        # try one‑line: Title Quality URL
+        one = line.split()
+        if len(one) >= 3 and one[-1].startswith("http"):
+            # last token is URL, second‑last is quality
+            quality = one[-2]
+            title   = " ".join(one[:-2])
+            url     = one[-1]
+            i += 1
+        # else, try two‑line: Title Quality \n URL
+        elif i + 1 < len(lines):
+            parts = line.rsplit(" ", 1)
+            if len(parts) == 2 and lines[i+1].startswith("http"):
+                title, quality = parts
+                url = lines[i+1].strip()
+                i += 2
+            else:
+                logging.warning(f"⚠️ Can't parse block starting at line {i}: {line}")
+                i += 1
+                continue
+        else:
+            logging.warning(f"⚠️ Can't parse line {i}: {line}")
+            i += 1
+            continue
 
-    while i < len(lines) - 1:
-        title_quality = lines[i].strip()
-        url_line       = lines[i+1].strip()
         try:
-            # last word of title_quality is quality
-            title, quality = title_quality.rsplit(" ", 1)
-            # call your sync URL shortener off the event loop
-            short_url = await asyncio.to_thread(_shorten_url_sync, url_line)
-
-            safe_key = clean_firebase_key(title)
-            movie    = get_movies().get(safe_key, {})
+            short_url = await asyncio.to_thread(_shorten_url_sync, url)
+            safe     = clean_firebase_key(title)
+            movie    = get_movies().get(safe, {})
             movie[quality] = short_url
-            ref.child(safe_key).set(movie)
+            ref.child(safe).set(movie)
             added += 1
-
         except Exception as e:
-            logging.warning(f"⚠️ Failed lines {i}/{i+1}: {e}")
-
-        i += 2
+            logging.warning(f"⚠️ Failed to save '{title}': {e}")
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
