@@ -108,14 +108,13 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             quality = parts[-1]
             title = " ".join(parts[:-1])
+            safe_title = clean_firebase_key(title)
 
             short_link = await shorten_link(link_line)
-            movie = get_movies().get(title, {})
+            movie = get_movies().get(safe_title, {})
             movie[quality] = short_link
 
-            safe_title = clean_firebase_key(title)
             ref.child(safe_title).set(movie)
-
             added += 1
 
         except Exception as e:
@@ -124,6 +123,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         i += 2
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
