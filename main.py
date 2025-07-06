@@ -76,6 +76,10 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"\u2705 Added *{title}* ({quality})", parse_mode="Markdown")
 
+def clean_firebase_key(key: str) -> str:
+    import re
+    return re.sub(r'[.#$/\[\]]', '_', key)
+
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
@@ -86,7 +90,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Please send movie lines like:\nTitle Quality\nLink\n(repeat for more).")
         return
 
-    lines = update.message.text.strip().split('\n')[1:]  # Skip the '/uploadbulk' command itself
+    lines = update.message.text.strip().split('\n')[1:]  # Skip /uploadbulk line
     added = 0
     i = 0
 
@@ -94,9 +98,8 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title_line = lines[i].strip()
         link_line = lines[i + 1].strip()
 
-        # Try parsing
         try:
-            parts = title_line.strip().split()
+            parts = title_line.split()
             if len(parts) < 2:
                 i += 2
                 continue
@@ -107,13 +110,15 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             short_link = await shorten_link(link_line)
             movie = get_movies().get(title, {})
             movie[quality] = short_link
-            ref.child(title).set(movie)
+
+            safe_title = clean_firebase_key(title)
+            ref.child(safe_title).set(movie)
             added += 1
 
         except Exception as e:
             logging.warning(f"⚠️ Failed to process lines {i} and {i+1}: {e}")
 
-        i += 2  # Move to next pair
+        i += 2
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
 
