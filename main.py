@@ -85,47 +85,44 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ Not authorized.")
-        return
+        return await update.message.reply_text("⛔ Not authorized.")
 
-    if not update.message.text:
-        await update.message.reply_text("❌ Please send lines like:\nTitle Quality\nLink\n(repeat for each movie).")
-        return
-
-    lines = update.message.text.strip().split('\n')
-    if lines[0].startswith("/uploadbulk"):
-        lines = lines[1:]  # skip command line
+    text = update.message.text or ""
+    lines = text.strip().split("\n")
+    if lines and lines[0].startswith("/uploadbulk"):
+        lines = lines[1:]
 
     added = 0
     i = 0
-
     while i < len(lines) - 1:
+        title_quality = lines[i].strip()
+        link_line = lines[i+1].strip()
         try:
-            title_quality_line = lines[i].strip()
-            link_line = lines[i + 1].strip()
-
-            # Split from the end to get quality
-            parts = title_quality_line.rsplit(" ", 1)
+            # split off the last "word" as quality
+            parts = title_quality.rsplit(" ", 1)
             if len(parts) != 2:
-                i += 2
-                continue
+                raise ValueError("Can't parse title and quality")
 
-            title = parts[0].strip()
-            quality = parts[1].strip()
-
+            title, quality = parts
             safe_title = clean_firebase_key(title)
-            short_link = await shorten_link(link_line)
+            if not safe_title:
+                raise ValueError("Empty title after sanitization")
+
+            # shorten link off the main thread
+            short_link = await asyncio.to_thread(shorten_link, link_line)
 
             movie = get_movies().get(safe_title, {})
             movie[quality] = short_link
             ref.child(safe_title).set(movie)
-
             added += 1
+
         except Exception as e:
-            logging.warning(f"⚠️ Failed to process lines {i} and {i+1}: {e}")
-        i += 2  # Move to the next pair
+            logging.warning(f"⚠️ Failed to process lines {i}/{i+1}: {e}")
+
+        i += 2
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
