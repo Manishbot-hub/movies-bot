@@ -1,4 +1,5 @@
 import os
+import requests
 import re
 import httpx
 import json
@@ -91,32 +92,25 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("⛔ Not authorized.")
 
     text = update.message.text or ""
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-    # drop the command itself
+    # strip off the command itself if present
+    lines = text.split("\n")
     if lines and lines[0].startswith("/uploadbulk"):
         lines = lines[1:]
-
     added = 0
     i = 0
+
     while i < len(lines) - 1:
-        title_line = lines[i]
-        link_line  = lines[i + 1]
-
+        title_quality = lines[i].strip()
+        url_line       = lines[i+1].strip()
         try:
-            # last token in the title line is the quality
-            parts = title_line.rsplit(" ", 1)
-            if len(parts) != 2:
-                raise ValueError(f"can't parse: {title_line!r}")
-            raw_title, quality = parts
-            safe_key = clean_firebase_key(raw_title)
-            if not safe_key:
-                raise ValueError("empty title after cleaning")
+            # last word of title_quality is quality
+            title, quality = title_quality.rsplit(" ", 1)
+            # call your sync URL shortener off the event loop
+            short_url = await asyncio.to_thread(_shorten_url_sync, url_line)
 
-            # offload the HTTP call in a thread to avoid 'never awaited'
-            short_link = await asyncio.to_thread(_shorten_url_sync, link_line)
-
-            movie = get_movies().get(safe_key, {})
-            movie[quality] = short_link
+            safe_key = clean_firebase_key(title)
+            movie    = get_movies().get(safe_key, {})
+            movie[quality] = short_url
             ref.child(safe_key).set(movie)
             added += 1
 
@@ -126,6 +120,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         i += 2
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
