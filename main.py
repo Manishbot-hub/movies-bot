@@ -119,35 +119,67 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 LINE_RE = re.compile(r"^(.+?)\s+(\d+p)\s+(https?://\S+)$")
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
+
     text = update.message.text or ""
     lines = text.strip().splitlines()
-    # Drop the command prefix if it’s on its own line
-    if lines and lines[0].startswith("/uploadbulk"):
-        lines = lines[1:]
 
     added = 0
-    for line in lines:
-        line = line.strip()
-        m = LINE_RE.match(line)
-        if not m:
-            logging.warning(f"⚠️ Skipping unrecognized line: {line!r}")
+    i = 0
+
+    # If the first line contains "/uploadbulk" and more text, keep the line
+    if lines and lines[0].strip().startswith("/uploadbulk"):
+        if len(lines[0].strip().split()) == 1:
+            # It's just the command, skip it
+            lines = lines[1:]
+        else:
+            # It's command + data, remove only the "/uploadbulk"
+            lines[0] = lines[0].replace("/uploadbulk", "", 1).strip()
+
+    total = len(lines)
+    logging.info(f"Bulk upload: {total} lines")
+
+    while i < total:
+        line = lines[i].strip()
+        parts = line.split()
+        if len(parts) >= 3 and parts[-1].startswith("http"):
+            title = " ".join(parts[:-2])
+            quality = parts[-2]
+            url = parts[-1]
+            i += 1
+        elif i + 1 < total and lines[i+1].strip().startswith("http"):
+            tparts = line.rsplit(" ", 1)
+            if len(tparts) != 2:
+                logging.warning(f"⚠️ Can't parse title/quality at line {i}: {line}")
+                i += 1
+                continue
+            title, quality = tparts
+            url = lines[i+1].strip()
+            i += 2
+        else:
+            logging.warning(f"⚠️ Unrecognized format at line {i}: {line}")
+            i += 1
             continue
 
-        title, quality, url = m.groups()
-        safe_key = clean_firebase_key(title)
-        # shorten off the main thread
-        short_url = await asyncio.to_thread(_shorten_url_sync, url)
-        movie = get_movies().get(safe_key, {})
-        movie[quality] = short_url
-        ref.child(safe_key).set(movie)
-        added += 1
-        logging.info(f"➕ Added '{title}' [{quality}] → {short_url}")
+        safe_title = clean_firebase_key(title)
+        if not safe_title:
+            logging.warning(f"⚠️ Empty title after sanitization: '{title}'")
+            continue
 
-    await update.message.reply_text(
-        f"✅ Bulk upload complete: {added} movie(s) added."
-    )
+        try:
+            short_url = await asyncio.to_thread(_shorten_url_sync, url)
+            movie = get_movies().get(safe_title, {})
+            movie[quality] = short_url
+            ref.child(safe_title).set(movie)
+            added += 1
+            logging.info(f"➕ Added '{title}' [{quality}] → {short_url}")
+        except Exception as e:
+            logging.warning(f"⚠️ Failed saving '{title}': {e}")
+
+    await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
