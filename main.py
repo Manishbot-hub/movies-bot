@@ -46,7 +46,7 @@ def clean_firebase_key(key: str) -> str:
 
 def _shorten_url_sync(link: str) -> str:
     """Synchronously call ShrinkMe to shorten a link."""
-    url = f"https://shrinkme.io/st?api={SHRINKME_API}&url={link}"
+    url = f"https://shrinkme.io/api?api={SHRINKME_API}&url={link}"
     logging.info(f"Shortener called: {url}")
 
     try:
