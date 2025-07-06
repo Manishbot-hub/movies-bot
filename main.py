@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("BOT_TOKEN")
 FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
-ADRINOLINKS_API_TOKEN = os.getenv("ADRINOLINKS_API_TOKEN")
+SHRINKME_API = os.getenv("SHRINKME_API")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 if not firebase_admin._apps:
@@ -42,23 +42,24 @@ def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
     return re.sub(r'[.#$/\[\]]', '_', key)
 
-import requests
+
 
 def _shorten_url_sync(link: str) -> str:
-    api = ADRINOLINKS_API_TOKEN
-    url = f"https://adrinolinks.in/st?api={api}&url={link}"
+    """Synchronously call ShrinkMe to shorten a link."""
+    url = f"https://shrinkme.io/st?api={SHRINKME_API}&url={link}"
     try:
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if data.get("status") == "success" and data.get("shortenedUrl"):
             return data["shortenedUrl"]
-    except ValueError:
-        # non‑JSON response
-        logging.warning("Shortener returned non‑JSON, using original link")
-    except Exception as e:
-        logging.warning(f"Shortener error: {e}")
+    except Exception:
+        pass
     return link
+
+async def shorten_link(link: str) -> str:
+    """Async wrapper: runs the sync function in a thread."""
+    return await asyncio.to_thread(_shorten_url_sync, link)
 
 
 
@@ -91,7 +92,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     *title_parts, quality, original_link = args
     title = "_".join(title_parts)
-    short_link = await asyncio.to_thread(_shorten_url_sync, original_link)
+    short_link = await shorten_link(original_link)
     movie = get_movies().get(title, {})
     movie[quality] = short_link
     ref.child(title).set(movie)
@@ -115,8 +116,7 @@ async def upload_bulk(update, context):
 
         title, quality, url = m.groups()
         safe_title = clean_firebase_key(title)
-        short_url = await asyncio.to_thread(_shorten_url_sync, url)
-
+        short_link = await shorten_link(original_link)
         movie = get_movies().get(safe_title, {})
         movie[quality] = short_url
         ref.child(safe_title).set(movie)
