@@ -88,41 +88,53 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    if not update.message.text:
+    text = update.message.text
+    if not text:
         await update.message.reply_text("❌ Please send movie lines like:\nTitle Quality\nLink\n(repeat for more).")
         return
 
-    lines = update.message.text.strip().split('\n')[1:]  # Skip /uploadbulk line
-    added = 0
-    i = 0
+    lines = text.strip().split('\n')
+    if not lines or len(lines) < 3:
+        await update.message.reply_text("❌ Not enough lines to parse.")
+        return
 
+    added = 0
+    i = 1  # skip /uploadbulk
     while i < len(lines) - 1:
         title_line = lines[i].strip()
         link_line = lines[i + 1].strip()
+        i += 2
 
         try:
             parts = title_line.split()
             if len(parts) < 2:
-                i += 2
-                continue
+                continue  # skip if title line is malformed
 
             quality = parts[-1]
-            title = " ".join(parts[:-1])
+            title = " ".join(parts[:-1]).strip()
+
+            if not title or not quality or not link_line:
+                continue
+
             safe_title = clean_firebase_key(title)
+            if not safe_title:
+                continue
 
             short_link = await shorten_link(link_line)
             movie = get_movies().get(safe_title, {})
             movie[quality] = short_link
-
             ref.child(safe_title).set(movie)
             added += 1
 
         except Exception as e:
-            logging.warning(f"⚠️ Failed to process lines {i} and {i+1}: {e}")
+            logging.warning(f"⚠️ Failed to process line pair: {e}")
+            continue
+        logging.info(f"Title: {title}, Quality: {quality}, Link: {link_line}")
+        logging.info(f"Safe Firebase Key: {safe_title}")
 
-        i += 2
 
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
 
 
 
