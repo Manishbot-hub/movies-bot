@@ -181,6 +181,19 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
 
 
+async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Confirm Delete All", callback_data="confirm_delete_all")]
+    ])
+    await update.message.reply_text(
+        "⚠️ Are you sure you want to delete *ALL* movies? This cannot be undone!",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
 
 
 
@@ -339,6 +352,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_movie_offset[user_id] = max(0, int(new_offset))
         await delete_last(user_id, context)
         await show_movie_page(user_id, context, query.message.reply_text)
+   
+    elif query.data == "confirm_delete_all":
+        ref.set({})  # Clears the 'movies' node
+        await query.edit_message_text("✅ All movies have been deleted from the database.")
+
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -363,6 +381,7 @@ telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
+telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 
 @app.on_event("startup")
 async def on_startup():
