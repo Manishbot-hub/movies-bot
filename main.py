@@ -286,43 +286,65 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    # List of unwanted words to clean (add/remove as needed)
+    print("✅ /cleantitles triggered")
     unwanted_words = [
         "download", "full movie", "watch", "online",
-        "free", "movie", "hd", "bluray", "web-dl", "1080p", "720p"
+        "free", "movie", "hd", "bluray", "web-dl"
     ]
 
     movies = get_movies()
     cleaned = 0
+    skipped = 0
+    unchanged = 0
+    changed_titles = []
 
     for raw_title in list(movies.keys()):
+        original = raw_title
         cleaned_title = raw_title
-        print(f"▶️ {raw_title} → {cleaned_title}")
 
-
+        # Remove unwanted words
         for word in unwanted_words:
-            # Remove each word (case-insensitive, full word)
             cleaned_title = re.sub(rf"(?i)\b{re.escape(word)}\b", "", cleaned_title)
 
-        # Collapse multiple spaces and trim
+        # Clean extra spaces
         cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
 
-        if cleaned_title and clean_firebase_key(cleaned_title) != clean_firebase_key(raw_title):
-            safe_cleaned = clean_firebase_key(cleaned_title)
-            safe_original = clean_firebase_key(raw_title)
+        if not cleaned_title:
+            continue  # skip empty title
 
-            # Skip if already cleaned key exists to avoid overwriting
-            if ref.child(safe_cleaned).get():
-                continue
+        cleaned_key = clean_firebase_key(cleaned_title)
+        original_key = clean_firebase_key(original)
 
-            ref.child(safe_cleaned).set(movies[raw_title])
-            ref.child(safe_original).delete()
+        print(f"🔍 {original} → {cleaned_title}")
+
+        # Check if the cleaned key is different enough
+        if cleaned_key == original_key and cleaned_title.lower() == original.lower():
+            unchanged += 1
+            continue
+
+        # If cleaned title already exists, skip to avoid overwriting
+        if ref.child(cleaned_key).get():
+            print(f"⚠️ Skipped (already exists): {cleaned_title}")
+            skipped += 1
+            continue
+
+        try:
+            # Set new key and delete old one
+            ref.child(cleaned_key).set(movies[original])
+            ref.child(original).delete()
+            changed_titles.append(f"{original} → {cleaned_title}")
             cleaned += 1
+        except Exception as e:
+            print(f"❌ Failed to rename {original}: {e}")
 
-    if cleaned == 0:
-        return await update.message.reply_text("✅ No titles contained unwanted words.")
+    summary = f"✅ Clean complete:\n• Renamed: {cleaned}\n• Skipped (exists): {skipped}\n• Unchanged: {unchanged}"
+    await update.message.reply_text(summary)
 
-    return await update.message.reply_text(f"✅ Cleaned {cleaned} title(s) by removing unwanted words.")
+    if changed_titles:
+        preview = "\n".join(changed_titles[:20])
+        await update.message.reply_text(f"*Changed Titles:*\n\n{preview}", parse_mode="Markdown")
+
+
 
 
 
