@@ -310,7 +310,8 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cleaned_title = original_title
 
         for word in unwanted_words:
-            re.sub(rf"(?i){re.escape(word)}", "", cleaned_title)
+            cleaned_title = re.sub(rf"(?i){re.escape(word)}", "", cleaned_title)
+
 
         cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
 
