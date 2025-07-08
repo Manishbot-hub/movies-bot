@@ -140,6 +140,9 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title = " ".join(parts[:-2])
             quality = parts[-2]
             link = parts[-1]
+            print(f"✅ Line parsed correctly: {line}")
+            print(f"→ title: {title}, quality: {quality}, link: {link}")
+            
         else:
             await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
             continue
