@@ -1,4 +1,5 @@
 import os
+import time
 import difflib
 import requests
 import re
@@ -102,9 +103,23 @@ def safe_callback_data(prefix: str, identifier: str) -> str:
     return combined[:60]  # Trim to avoid Telegram's 64-byte limit
 
 async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # 🛡️ Avoid spamming Telegram API
+    now = time.time()
+    if user_id in last_user_message_time:
+        elapsed = now - last_user_message_time[user_id]
+        if elapsed < 2:  # less than 2 seconds since last message
+            return  # Ignore to prevent flood
+    last_user_message_time[user_id] = now
+
     if "edit_title_old" in context.user_data:
         return await handle_new_title(update, context)
+
+    await delete_last(user_id, context)
     return await search_movie(update, context)
+
+
 
 
 
@@ -118,7 +133,29 @@ async def send_temp_log(context, chat_id, text):
         except:
             pass
 
-    asyncio.create_task(delete_later())  # Run deletion without blocking
+    asyncio.create_task(delete_later())
+
+
+# ✅ Properly placed helper (not nested!)
+async def send_temp_log_rate_limited(context, chat_id, text, delay=1):
+    """Rate-limited log sender to avoid Telegram flood errors."""
+    try:
+        msg = await context.bot.send_message(chat_id=chat_id, text=text)
+        await asyncio.sleep(delay)  # delay between messages
+        asyncio.create_task(delete_after_delay(context, chat_id, msg.message_id))
+    except Exception as e:
+        logging.warning(f"Send failed: {e}")
+
+
+async def delete_after_delay(context, chat_id, message_id, delay=10):
+    """Deletes a message after delay."""
+    await asyncio.sleep(delay)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as e:
+        logging.warning(f"Delete failed: {e}")
+
+
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -160,7 +197,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 print(f"✅ Parsed line: {title} {quality} {link}")
             else:
                 print(f"⚠️ Skipped invalid line: {line}")
-                await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
+                await send_temp_log_rate_limited(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
                 continue
 
             safe_key = clean_firebase_key(title)
@@ -168,14 +205,14 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if quality in movie:
                 print(f"⚠️ Already exists: {title} {quality}")
-                await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
+                await send_temp_log_rate_limited(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
                 continue
 
             try:
                 short_url = await asyncio.to_thread(_shorten_url_sync, link)
                 ref.child(safe_key).update({quality: short_url})
                 print(f"✅ Saved to Firebase: {title} {quality} -> {short_url}")
-                await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
+                await send_temp_log_rate_limited(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
             except Exception as e:
                 print(f"❌ Failed to save: {title} {quality} — {e}")
                 await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
