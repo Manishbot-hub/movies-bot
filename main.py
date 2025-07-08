@@ -96,66 +96,79 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_temp_log(context, chat_id, text):
     msg = await context.bot.send_message(chat_id=chat_id, text=text)
-    await asyncio.sleep(10)
-    try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
-    except:
-        pass
+
+    async def delete_later():
+        await asyncio.sleep(10)
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+        except:
+            pass
+
+    asyncio.create_task(delete_later())  # Run deletion without blocking
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    print("🚀 /uploadbulk triggered")
-
-    doc = update.message.document
-    if not doc or not doc.file_name.lower().endswith('.txt'):
-        return await update.message.reply_text("⚠️ Please send a valid .txt file after /uploadbulk.")
+    # 🔒 Prevent duplicate runs
+    if context.bot_data.get("upload_running", False):
+        return await update.message.reply_text("⚠️ Upload already in progress. Try again later.")
+    context.bot_data["upload_running"] = True
 
     try:
-        file_obj = await doc.get_file()
-        content = await file_obj.download_as_bytearray()
-        text = content.decode("utf-8", errors="ignore")
-    except Exception as e:
-        print(f"❌ File read error: {e}")
-        return await update.message.reply_text("❌ Failed to download or read the file.")
+        print("🚀 /uploadbulk triggered")
 
-    lines = text.strip().splitlines()
-    print(f"📄 Read {len(lines)} lines from uploaded file")
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        parts = line.split()
-        if len(parts) >= 3 and parts[-2].endswith("p") and parts[-1].startswith("http"):
-            title = " ".join(parts[:-2])
-            quality = parts[-2]
-            link = parts[-1]
-            print(f"✅ Parsed line: {title} {quality} {link}")
-        else:
-            print(f"⚠️ Skipped invalid line: {line}")
-            await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
-            continue
-
-        safe_key = clean_firebase_key(title)
-        movie = ref.child(safe_key).get() or {}
-
-        if quality in movie:
-            print(f"⚠️ Already exists: {title} {quality}")
-            await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
-            continue
+        doc = update.message.document
+        if not doc or not doc.file_name.lower().endswith('.txt'):
+            return await update.message.reply_text("⚠️ Please send a valid .txt file after /uploadbulk.")
 
         try:
-            short_url = await asyncio.to_thread(_shorten_url_sync, link)
-            movie[quality] = short_url
-            ref.child(safe_key).set(movie)
-            print(f"✅ Saved to Firebase: {title} {quality} -> {short_url}")
-            await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
+            file_obj = await doc.get_file()
+            content = await file_obj.download_as_bytearray()
+            text = content.decode("utf-8", errors="ignore")
         except Exception as e:
-            print(f"❌ Failed to save: {title} {quality} — {e}")
-            await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
+            print(f"❌ File read error: {e}")
+            return await update.message.reply_text("❌ Failed to download or read the file.")
+
+        lines = text.strip().splitlines()
+        print(f"📄 Read {len(lines)} lines from uploaded file")
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            parts = line.split()
+            if len(parts) >= 3 and parts[-2].endswith("p") and parts[-1].startswith("http"):
+                title = " ".join(parts[:-2])
+                quality = parts[-2]
+                link = parts[-1]
+                print(f"✅ Parsed line: {title} {quality} {link}")
+            else:
+                print(f"⚠️ Skipped invalid line: {line}")
+                await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
+                continue
+
+            safe_key = clean_firebase_key(title)
+            movie = ref.child(safe_key).get() or {}
+
+            if quality in movie:
+                print(f"⚠️ Already exists: {title} {quality}")
+                await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
+                continue
+
+            try:
+                short_url = await asyncio.to_thread(_shorten_url_sync, link)
+                movie[quality] = short_url
+                ref.child(safe_key).set(movie)
+                print(f"✅ Saved to Firebase: {title} {quality} -> {short_url}")
+                await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
+            except Exception as e:
+                print(f"❌ Failed to save: {title} {quality} — {e}")
+                await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
+    finally:
+        context.bot_data["upload_running"] = False
+
 
 
 async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,33 +178,40 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.replace("/addmovie", "").strip()
     lines = text.split("\n")
 
+    # Detect input format
     if len(lines) == 2:
         title_quality_line, link = lines
     else:
         parts = text.split()
         if len(parts) < 3:
-            return await send_temp_log(context, update.effective_chat.id, "❌ Invalid format. Use:\nTitle  Quality  Link\nor\nTitle  Quality\nLink")
+            return await send_temp_log(context, update.effective_chat.id,
+                "❌ Invalid format.\nUse:\nTitle  Quality  Link\nor\nTitle  Quality\nLink")
         title_quality_line = " ".join(parts[:-1])
         link = parts[-1]
 
     match = re.match(r"(.+?)\s{2,}(\d{3,4}p)", title_quality_line)
     if not match:
-        return await send_temp_log(context, update.effective_chat.id, "❌ Couldn't parse title and quality. Use double space between them.")
+        return await send_temp_log(context, update.effective_chat.id,
+            "❌ Couldn't parse title and quality. Use double space between them.")
 
     title, quality = match.groups()
     safe_key = clean_firebase_key(title)
     movie = ref.child(safe_key).get() or {}
 
     if quality in movie:
-        return await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
+        return await send_temp_log(context, update.effective_chat.id,
+            f"⚠️ Skipped: {title}  {quality} already exists")
 
     try:
         short_url = await asyncio.to_thread(_shorten_url_sync, link)
         movie[quality] = short_url
         ref.child(safe_key).set(movie)
-        return await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
-    except:
-        return await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
+        return await send_temp_log(context, update.effective_chat.id,
+            f"✅ Added: {title}  {quality}  {short_url}")
+    except Exception as e:
+        return await send_temp_log(context, update.effective_chat.id,
+            f"❌ Failed: {title}  {quality} — error shortening or saving link")
+
 
 
 
