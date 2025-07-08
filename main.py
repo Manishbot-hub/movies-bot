@@ -286,23 +286,44 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
+    # List of unwanted words to clean (add/remove as needed)
+    unwanted_words = [
+        "download", "full movie", "watch", "online",
+        "free", "movie", "hd", "bluray", "web-dl", "1080p", "720p"
+    ]
+
     movies = get_movies()
     cleaned = 0
 
-    for title in list(movies.keys()):
-        if "download" in title.lower():
-            cleaned_title = re.sub(r"(?i)\bdownload\b", "", title).strip()
-            cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title)  # remove extra spaces
+    for raw_title in list(movies.keys()):
+        cleaned_title = raw_title
+        print(f"▶️ {raw_title} → {cleaned_title}")
 
-            if cleaned_title and cleaned_title != title:
-                ref.child(clean_firebase_key(cleaned_title)).set(movies[title])
-                ref.child(title).delete()
-                cleaned += 1
+
+        for word in unwanted_words:
+            # Remove each word (case-insensitive, full word)
+            cleaned_title = re.sub(rf"(?i)\b{re.escape(word)}\b", "", cleaned_title)
+
+        # Collapse multiple spaces and trim
+        cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
+
+        if cleaned_title and clean_firebase_key(cleaned_title) != clean_firebase_key(raw_title):
+            safe_cleaned = clean_firebase_key(cleaned_title)
+            safe_original = clean_firebase_key(raw_title)
+
+            # Skip if already cleaned key exists to avoid overwriting
+            if ref.child(safe_cleaned).get():
+                continue
+
+            ref.child(safe_cleaned).set(movies[raw_title])
+            ref.child(safe_original).delete()
+            cleaned += 1
 
     if cleaned == 0:
-        return await update.message.reply_text("✅ No titles contained the word 'Download'.")
+        return await update.message.reply_text("✅ No titles contained unwanted words.")
 
-    return await update.message.reply_text(f"✅ Cleaned {cleaned} title(s) by removing 'Download'.")
+    return await update.message.reply_text(f"✅ Cleaned {cleaned} title(s) by removing unwanted words.")
+
 
 
 
