@@ -101,6 +101,10 @@ def safe_callback_data(prefix: str, identifier: str) -> str:
     combined = f"{prefix}|{identifier}".replace("\n", " ").strip()
     return combined[:60]  # Trim to avoid Telegram's 64-byte limit
 
+async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "edit_title_old" in context.user_data:
+        return await handle_new_title(update, context)
+    return await search_movie(update, context)
 
 
 
@@ -540,17 +544,20 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("addmovie", add_movie))
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
-telegram_app.add_handler(CommandHandler("search", search_movie))
+telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
-telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_new_title))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
-telegram_app.add_handler(CallbackQueryHandler(button_handler))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
+
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
+telegram_app.add_handler(CallbackQueryHandler(button_handler))
+
+# ✅ Handles both title edit and general text search
+telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_title_or_search))
+
 
 
 
