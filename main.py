@@ -484,12 +484,13 @@ telegram_app.add_handler(CommandHandler("search", search_movie))
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
+telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_new_title))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
-telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
+
 
 
 @app.on_event("startup")
