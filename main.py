@@ -20,7 +20,10 @@ from telegram.ext import (
     filters,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 TOKEN = os.getenv("BOT_TOKEN")
 FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
@@ -283,13 +286,14 @@ async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ Title updated:\n`{old_title}` → `{new_title}`"
     )
 
+
+
 async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    print("✅ /cleantitles triggered")
+    logging.info("✅ /cleantitles triggered")
 
-    # List of words to remove
     unwanted_words = [
         "download", "full movie", "watch", "online",
         "free", "movie", "hd", "bluray", "web-dl"
@@ -302,41 +306,34 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     changed_titles = []
 
     for key in list(movies.keys()):
-        # Work directly on actual Firebase keys
-        cleaned_title = key
+        original_title = key
+        cleaned_title = original_title
 
-        # Remove unwanted words (case-insensitive, whole words)
         for word in unwanted_words:
-            cleaned_title = re.sub(rf"(?i)\b{re.escape(word)}\b", "", cleaned_title)
+            re.sub(rf"(?i){re.escape(word)}", "", cleaned_title)
 
-        # Clean extra spaces and trim
         cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
 
-        # Skip if nothing changed
-        if cleaned_title == key:
+        if not cleaned_title or cleaned_title == original_title:
             unchanged += 1
             continue
 
-        # Use cleaned key
         new_key = clean_firebase_key(cleaned_title)
 
-        # Avoid overwrite if cleaned key already exists
         if ref.child(new_key).get():
-            print(f"⚠️ Skipped (already exists): {new_key}")
+            logging.info(f"⚠️ Skipped (exists): {cleaned_title}")
             skipped += 1
             continue
 
-        # Rename in Firebase
         try:
-            ref.child(new_key).set(movies[key])
-            ref.child(key).delete()
+            ref.child(new_key).set(movies[original_title])
+            ref.child(original_title).delete()
+            logging.info(f"✅ Renamed: {original_title} → {cleaned_title}")
+            changed_titles.append(f"{original_title} → {cleaned_title}")
             cleaned += 1
-            changed_titles.append(f"{key} → {new_key}")
-            print(f"✅ Renamed: {key} → {new_key}")
         except Exception as e:
-            print(f"❌ Error renaming {key}: {e}")
+            logging.error(f"❌ Failed to clean {original_title}: {e}")
 
-    # Final report
     summary = f"✅ Clean complete:\n• Renamed: {cleaned}\n• Skipped: {skipped}\n• Unchanged: {unchanged}"
     await update.message.reply_text(summary)
 
