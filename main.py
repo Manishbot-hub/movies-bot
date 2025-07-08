@@ -93,7 +93,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(text)
     user_last_bot_message[update.effective_user.id] = msg.message_id
 
-
+def safe_callback_data(prefix: str, identifier: str) -> str:
+    """
+    Safely generate callback_data for Telegram buttons.
+    Ensures the data is <= 64 bytes, and strips unsafe characters.
+    """
+    combined = f"{prefix}|{identifier}".replace("\n", " ").strip()
+    return combined[:60]  # Trim to avoid Telegram's 64-byte limit
 
 
 
@@ -163,8 +169,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             try:
                 short_url = await asyncio.to_thread(_shorten_url_sync, link)
-                movie[quality] = short_url
-                ref.child(safe_key).set(movie)
+                ref.child(safe_key).update({quality: short_url})
                 print(f"✅ Saved to Firebase: {title} {quality} -> {short_url}")
                 await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
             except Exception as e:
@@ -208,8 +213,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         short_url = await asyncio.to_thread(_shorten_url_sync, link)
-        movie[quality] = short_url
-        ref.child(safe_key).set(movie)
+        ref.child(safe_key).update({quality: short_url})
         return await send_temp_log(context, update.effective_chat.id,
             f"✅ Added: {title}  {quality}  {short_url}")
     except Exception as e:
@@ -254,9 +258,10 @@ async def edittitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = [
-        [InlineKeyboardButton(title, callback_data=f"edit_title_select|{title}")]
-        for title in matches[:10]
-    ]
+    [InlineKeyboardButton(title, callback_data=safe_callback_data("edit_title_select", title))]
+    for title in matches[:10]
+]
+
 
     await update.message.reply_text(
         "🎯 Select the movie whose title you want to edit:",
@@ -310,8 +315,7 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cleaned_title = original_title
 
         for word in unwanted_words:
-            cleaned_title = re.sub(rf"(?i){re.escape(word)}", "", cleaned_title)
-
+            cleaned_title = re.sub(rf"(?i)\b{re.escape(word)}\b", "", cleaned_title)
 
         cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
 
@@ -341,15 +345,6 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if changed_titles:
         preview = "\n".join(changed_titles[:20])
         await update.message.reply_text(f"*Changed Titles:*\n\n{preview}", parse_mode="Markdown")
-
-
-
-
-
-
-
-
-
 
 
 
@@ -398,7 +393,7 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = [
-        [InlineKeyboardButton(key.replace("_", " "), callback_data=f"movie|{key}")]
+        [InlineKeyboardButton(key.replace("_", " "), callback_data=safe_callback_data("movie", key))]
         for key in final_matches
     ]
 
@@ -419,13 +414,14 @@ async def show_movie_page(user_id, context, send_func):
     end = offset + MOVIES_PER_PAGE
     current_page = movies[offset:end]
 
-    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{title}")] for title in current_page]
+    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=safe_callback_data("movie", title))] for title in current_page]
 
     nav_buttons = []
     if offset > 0:
-        nav_buttons.append(InlineKeyboardButton("◀ Back", callback_data=f"back|{offset - MOVIES_PER_PAGE}"))
+        nav_buttons.append(InlineKeyboardButton("◀ Back", callback_data=safe_callback_data("back", str(offset - MOVIES_PER_PAGE))))
     if end < len(movies):
-        nav_buttons.append(InlineKeyboardButton("▶ Show More", callback_data=f"more|{end}"))
+        nav_buttons.append(InlineKeyboardButton("▶ Show More", callback_data=safe_callback_data("more", str(end))))
+
     if nav_buttons:
         keyboard.append(nav_buttons)
 
@@ -454,7 +450,7 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = f"*{title.replace('_', ' ')}*\n\n"
     buttons = [[InlineKeyboardButton(f"{quality} \U0001F517", url=link)] for quality, link in movie.items()]
-    buttons.append([InlineKeyboardButton("\u26A0\uFE0F Report Broken Link", callback_data=f"report|{title}")])
+    buttons.append([InlineKeyboardButton("\u26A0\uFE0F Report Broken Link", callback_data=safe_callback_data("report", title))])
 
     msg = await query.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
     user_last_bot_message[query.from_user.id] = msg.message_id
@@ -478,7 +474,7 @@ async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\u274C No matching movies.")
         return
 
-    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"delete|{title}")] for title in matches]
+    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=safe_callback_data("delete", title))] for title in matches]
     await update.message.reply_text("Select movie to delete:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
