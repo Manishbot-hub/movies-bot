@@ -282,6 +282,27 @@ async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ Title updated:\n`{old_title}` → `{new_title}`"
     )
 
+async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    movies = get_movies()
+    cleaned = 0
+
+    for title in list(movies.keys()):
+        if "download" in title.lower():
+            cleaned_title = re.sub(r"(?i)\bdownload\b", "", title).strip()
+            cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title)  # remove extra spaces
+
+            if cleaned_title and cleaned_title != title:
+                ref.child(clean_firebase_key(cleaned_title)).set(movies[title])
+                ref.child(title).delete()
+                cleaned += 1
+
+    if cleaned == 0:
+        return await update.message.reply_text("✅ No titles contained the word 'Download'.")
+
+    return await update.message.reply_text(f"✅ Cleaned {cleaned} title(s) by removing 'Download'.")
 
 
 
@@ -486,6 +507,7 @@ telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_new_title))
+telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_movie))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
