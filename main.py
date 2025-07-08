@@ -89,96 +89,113 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(text)
     user_last_bot_message[update.effective_user.id] = msg.message_id
 
-async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return await update.message.reply_text("⛔ Not authorized.")
-    args = context.args
-    if len(args) < 3:
-        return await update.message.reply_text(
-            "Usage:\n/addmovie Title Quality Link",
-            parse_mode="Markdown"
-        )
-
-    *title_parts, quality, url = args
-    title = " ".join(title_parts).strip()
-    safe_key = clean_firebase_key(title)
-    short_url = await asyncio.to_thread(_shorten_url_sync, url)
-
-    movie = get_movies().get(safe_key, {})
-    movie[quality] = short_url
-    ref.child(safe_key).set(movie)
-
-    await update.message.reply_text(
-        f"✅ Added *{title}* ({quality}) → {short_url}",
-        parse_mode="Markdown"
-    )
-
-    
 
 
-LINE_RE = re.compile(r"^(.+?)\s+(\d+p)\s+(https?://\S+)$")
+async def send_temp_log(context, chat_id, text):
+    msg = await context.bot.send_message(chat_id=chat_id, text=text)
+    await asyncio.sleep(10)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+    except:
+        pass
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    text = update.message.text or ""
+    # Get input from uploaded file or message text
+    if update.message.document:
+        file = await update.message.document.get_file()
+        text = (await file.download_as_bytearray()).decode("utf-8")
+    else:
+        text = update.message.text or ""
+
     lines = text.strip().splitlines()
 
-    added = 0
-    i = 0
-
-    # If the first line contains "/uploadbulk" and more text, keep the line
+    # Remove command prefix
     if lines and lines[0].strip().startswith("/uploadbulk"):
         if len(lines[0].strip().split()) == 1:
-            # It's just the command, skip it
             lines = lines[1:]
         else:
-            # It's command + data, remove only the "/uploadbulk"
             lines[0] = lines[0].replace("/uploadbulk", "", 1).strip()
 
-    total = len(lines)
-    logging.info(f"Bulk upload: {total} lines")
-
-    while i < total:
+    i = 0
+    while i < len(lines):
         line = lines[i].strip()
-        parts = line.split()
-        if len(parts) >= 3 and parts[-1].startswith("http"):
-            title = " ".join(parts[:-2])
-            quality = parts[-2]
-            url = parts[-1]
+        title, quality, link = None, None, None
+
+        # Format 1: full line with title, quality, link
+        match1 = re.match(r"(.+?)\s{1,}(\d{3,4}p)\s+(https?://\S+)", line)
+        if match1:
+            title, quality, link = match1.groups()
             i += 1
-        elif i + 1 < total and lines[i+1].strip().startswith("http"):
-            tparts = line.rsplit(" ", 1)
-            if len(tparts) != 2:
-                logging.warning(f"⚠️ Can't parse title/quality at line {i}: {line}")
+
+        # Format 2: title + quality on one line, link on next
+        else:
+            match2 = re.match(r"(.+?)\s{1,}(\d{3,4}p)", line)
+            if match2 and i + 1 < len(lines):
+                title, quality = match2.groups()
+                i += 1
+                link = lines[i].strip()
+                i += 1
+            else:
                 i += 1
                 continue
-            title, quality = tparts
-            url = lines[i+1].strip()
-            i += 2
-        else:
-            logging.warning(f"⚠️ Unrecognized format at line {i}: {line}")
-            i += 1
+
+        if not title or not quality or not link:
             continue
 
-        safe_title = clean_firebase_key(title)
-        if not safe_title:
-            logging.warning(f"⚠️ Empty title after sanitization: '{title}'")
+        safe_key = clean_firebase_key(title)
+        movie = ref.child(safe_key).get() or {}
+
+        if quality in movie:
+            await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
             continue
 
         try:
-            short_url = await asyncio.to_thread(_shorten_url_sync, url)
-            movie = get_movies().get(safe_title, {})
+            short_url = await asyncio.to_thread(_shorten_url_sync, link)
             movie[quality] = short_url
-            ref.child(safe_title).set(movie)
-            added += 1
-            logging.info(f"➕ Added '{title}' [{quality}] → {short_url}")
+            ref.child(safe_key).set(movie)
+            await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
         except Exception as e:
-            logging.warning(f"⚠️ Failed saving '{title}': {e}")
+            await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
 
-    await update.message.reply_text(f"✅ Bulk upload complete: {added} movie(s) added.")
+
+async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    text = update.message.text.replace("/addmovie", "").strip()
+    lines = text.split("\n")
+
+    if len(lines) == 2:
+        title_quality_line, link = lines
+    else:
+        parts = text.split()
+        if len(parts) < 3:
+            return await send_temp_log(context, update.effective_chat.id, "❌ Invalid format. Use:\nTitle  Quality  Link\nor\nTitle  Quality\nLink")
+        title_quality_line = " ".join(parts[:-1])
+        link = parts[-1]
+
+    match = re.match(r"(.+?)\s{2,}(\d{3,4}p)", title_quality_line)
+    if not match:
+        return await send_temp_log(context, update.effective_chat.id, "❌ Couldn't parse title and quality. Use double space between them.")
+
+    title, quality = match.groups()
+    safe_key = clean_firebase_key(title)
+    movie = ref.child(safe_key).get() or {}
+
+    if quality in movie:
+        return await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
+
+    try:
+        short_url = await asyncio.to_thread(_shorten_url_sync, link)
+        movie[quality] = short_url
+        ref.child(safe_key).set(movie)
+        return await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
+    except:
+        return await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
+
 
 
 async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
