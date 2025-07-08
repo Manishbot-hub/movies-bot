@@ -40,6 +40,7 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 
 user_last_bot_message = {}
+pending_reports = {}  # user_id -> title_being_reported
 last_user_message_time = {}
 user_movie_offset = {}  # For pagination
 MOVIES_PER_PAGE = 10
@@ -106,19 +107,45 @@ def safe_callback_data(prefix: str, identifier: str) -> str:
 async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    # 🛡️ Avoid spamming Telegram API
+    # 🛡️ Rate-limit to avoid flood
     now = time.time()
     if user_id in last_user_message_time:
         elapsed = now - last_user_message_time[user_id]
-        if elapsed < 2:  # less than 2 seconds since last message
-            return  # Ignore to prevent flood
+        if elapsed < 2:
+            return
     last_user_message_time[user_id] = now
 
+    # ✏️ Handle report reason input
+    if user_id in pending_reports:
+        title = pending_reports.pop(user_id)
+        reason = update.message.text.strip()
+
+        if not reason or len(reason) < 3:
+            await update.message.reply_text("⚠️ Report reason too short. Report canceled.")
+            return
+
+        user_reported_movies.setdefault(user_id, set()).add(title)
+
+        await update.message.reply_text("✅ Thanks! Your report has been sent to the admin.")
+
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"⚠️ *New Broken Link Report*\n🎬 *{title.replace('_',' ')}*\n👤 User: `{user_id}`\n📝 Reason: _{reason}_",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logging.warning(f"❌ Failed to notify admin: {e}")
+        return
+
+    # ✏️ Handle title rename
     if "edit_title_old" in context.user_data:
         return await handle_new_title(update, context)
 
+    # 🔍 Fallback to movie search
     await delete_last(user_id, context)
     return await search_movie(update, context)
+
 
 
 
@@ -546,8 +573,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data.startswith("report|"):
         _, title = query.data.split("|", 1)
-        logging.warning(f"\u26A0\uFE0F User {user_id} reported broken link for movie: {title}")
-        await query.edit_message_text("\u2705 Thanks for reporting! Admin will review.")
+
+        reported_set = user_reported_movies.setdefault(user_id, set())
+        if title in reported_set:
+            await query.answer("⛔ You already reported this movie.", show_alert=True)
+            return
+
+        # Save that this user is now reporting this movie
+        pending_reports[user_id] = title
+        await query.message.reply_text(
+            f"📝 Please type the issue with *{title.replace('_', ' ')}*.\nExample: `link not working`, `wrong audio`, etc.",
+            parse_mode="Markdown"
+       )
+
 
     elif query.data.startswith("more|"):
         _, new_offset = query.data.split("|", 1)
