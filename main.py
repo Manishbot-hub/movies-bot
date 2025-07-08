@@ -91,6 +91,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+
 async def send_temp_log(context, chat_id, text):
     msg = await context.bot.send_message(chat_id=chat_id, text=text)
     await asyncio.sleep(10)
@@ -110,6 +112,8 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         text = update.message.text or ""
 
+    # Fix potential BOM encoding issues
+    text = text.lstrip("\ufeff")
     lines = text.strip().splitlines()
 
     # Remove command prefix
@@ -119,30 +123,19 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             lines[0] = lines[0].replace("/uploadbulk", "", 1).strip()
 
-    i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-        title, quality, link = None, None, None
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
 
-        # Format 1: full line with title, quality, link
-        match1 = re.match(r"(.+?)\s{1,}(\d{3,4}p)\s+(https?://\S+)", line)
-        if match1:
-            title, quality, link = match1.groups()
-            i += 1
-
-        # Format 2: title + quality on one line, link on next
+        # Improved parser: handles messy spacing
+        parts = line.split()
+        if len(parts) >= 3 and parts[-2].endswith("p") and parts[-1].startswith("http"):
+            title = " ".join(parts[:-2])
+            quality = parts[-2]
+            link = parts[-1]
         else:
-            match2 = re.match(r"(.+?)\s{1,}(\d{3,4}p)", line)
-            if match2 and i + 1 < len(lines):
-                title, quality = match2.groups()
-                i += 1
-                link = lines[i].strip()
-                i += 1
-            else:
-                i += 1
-                continue
-
-        if not title or not quality or not link:
+            await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
             continue
 
         safe_key = clean_firebase_key(title)
