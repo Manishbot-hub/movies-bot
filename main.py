@@ -40,6 +40,7 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 
 user_last_bot_message = {}
+last_user_message_time = {}
 user_movie_offset = {}  # For pagination
 MOVIES_PER_PAGE = 10
 
