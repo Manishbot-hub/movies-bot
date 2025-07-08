@@ -93,6 +93,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+import re
+import asyncio
+
 async def send_temp_log(context, chat_id, text):
     msg = await context.bot.send_message(chat_id=chat_id, text=text)
     await asyncio.sleep(10)
@@ -105,45 +108,36 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    # Get input from uploaded file or message text
-    file = None
-    if update.message.document:
-        file = await update.message.document.get_file()
-    elif update.message.reply_to_message and update.message.reply_to_message.document:
-        file = await update.message.reply_to_message.document.get_file()
+    print("🚀 /uploadbulk triggered")
 
-    if file:
-        text = (await file.download_as_bytearray()).decode("utf-8")
-    else:
-        text = update.message.text or ""
+    doc = update.message.document
+    if not doc or not doc.file_name.lower().endswith('.txt'):
+        return await update.message.reply_text("⚠️ Please send a valid .txt file after /uploadbulk.")
 
+    try:
+        file_obj = await doc.get_file()
+        content = await file_obj.download_as_bytearray()
+        text = content.decode("utf-8", errors="ignore")
+    except Exception as e:
+        print(f"❌ File read error: {e}")
+        return await update.message.reply_text("❌ Failed to download or read the file.")
 
-    # Fix potential BOM encoding issues
-    text = text.lstrip("\ufeff")
     lines = text.strip().splitlines()
-
-    # Remove command prefix
-    if lines and lines[0].strip().startswith("/uploadbulk"):
-        if len(lines[0].strip().split()) == 1:
-            lines = lines[1:]
-        else:
-            lines[0] = lines[0].replace("/uploadbulk", "", 1).strip()
+    print(f"📄 Read {len(lines)} lines from uploaded file")
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Improved parser: handles messy spacing
         parts = line.split()
         if len(parts) >= 3 and parts[-2].endswith("p") and parts[-1].startswith("http"):
             title = " ".join(parts[:-2])
             quality = parts[-2]
             link = parts[-1]
-            print(f"✅ Line parsed correctly: {line}")
-            print(f"→ title: {title}, quality: {quality}, link: {link}")
-            
+            print(f"✅ Parsed line: {title} {quality} {link}")
         else:
+            print(f"⚠️ Skipped invalid line: {line}")
             await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
             continue
 
@@ -151,6 +145,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         movie = ref.child(safe_key).get() or {}
 
         if quality in movie:
+            print(f"⚠️ Already exists: {title} {quality}")
             await send_temp_log(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
             continue
 
@@ -158,8 +153,10 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             short_url = await asyncio.to_thread(_shorten_url_sync, link)
             movie[quality] = short_url
             ref.child(safe_key).set(movie)
+            print(f"✅ Saved to Firebase: {title} {quality} -> {short_url}")
             await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
         except Exception as e:
+            print(f"❌ Failed to save: {title} {quality} — {e}")
             await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
 
 
@@ -197,6 +194,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await send_temp_log(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
     except:
         return await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
+
 
 
 
