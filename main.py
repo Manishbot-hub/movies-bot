@@ -248,9 +248,10 @@ async def edittitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not matches:
         return await update.message.reply_text("❌ No matching movies found.")
 
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = [
         [InlineKeyboardButton(title, callback_data=f"edit_title_select|{title}")]
-        for title in matches[:10]  # limit buttons to avoid Telegram overflow
+        for title in matches[:10]
     ]
 
     await update.message.reply_text(
@@ -258,9 +259,10 @@ async def edittitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "edit_title_old" not in context.user_data:
-        return  # No edit in progress
+        return  # Ignore unrelated messages
 
     new_title = update.message.text.strip()
     old_title = context.user_data.pop("edit_title_old")
@@ -272,7 +274,6 @@ async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not movie:
         return await update.message.reply_text("❌ Original movie not found.")
 
-    # Save movie under new title, delete old entry
     ref.child(new_key).set(movie)
     ref.child(old_key).delete()
 
@@ -280,6 +281,7 @@ async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context, update.effective_chat.id,
         f"✅ Title updated:\n`{old_title}` → `{new_title}`"
     )
+
 
 
 
