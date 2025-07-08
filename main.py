@@ -43,6 +43,7 @@ user_last_bot_message = {}
 pending_reports = {}  # user_id -> title_being_reported
 last_user_message_time = {}
 user_movie_offset = {}  # For pagination
+user_reported_movies = {}
 MOVIES_PER_PAGE = 10
 
 def clean_firebase_key(key: str) -> str:
@@ -119,6 +120,9 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
     if user_id in pending_reports:
         title = pending_reports.pop(user_id)
         reason = update.message.text.strip()
+        if not update.message or not update.message.text:
+           return
+
 
         if not reason or len(reason) < 3:
             await update.message.reply_text("⚠️ Report reason too short. Report canceled.")
@@ -133,7 +137,13 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
                 chat_id=ADMIN_ID,
                 text=f"⚠️ *New Broken Link Report*\n🎬 *{title.replace('_',' ')}*\n👤 User: `{user_id}`\n📝 Reason: _{reason}_",
                 parse_mode="Markdown"
-            )
+           )
+        except Exception:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"[REPORT] {title.replace('_', ' ')}\nUser: {user_id}\nReason: {reason}"
+           )
+
         except Exception as e:
             logging.warning(f"❌ Failed to notify admin: {e}")
         return
@@ -574,17 +584,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("report|"):
         _, title = query.data.split("|", 1)
 
-        reported_set = user_reported_movies.setdefault(user_id, set())
-        if title in reported_set:
-            await query.answer("⛔ You already reported this movie.", show_alert=True)
+        if user_id in user_reported_movies and title in user_reported_movies[user_id]:
+            await query.edit_message_text("⚠️ You've already reported this movie.")
             return
 
-        # Save that this user is now reporting this movie
         pending_reports[user_id] = title
-        await query.message.reply_text(
-            f"📝 Please type the issue with *{title.replace('_', ' ')}*.\nExample: `link not working`, `wrong audio`, etc.",
+        await query.edit_message_text(
+            f"📝 Please describe the problem with *{title.replace('_', ' ')}*.\n\n"
+            f"Example: 'Wrong link', '404 not found', 'GDToT page blank', etc.",
             parse_mode="Markdown"
        )
+
 
 
     elif query.data.startswith("more|"):
