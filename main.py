@@ -1,4 +1,5 @@
 import os
+import difflib
 import requests
 import re
 import httpx
@@ -298,44 +299,37 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     unchanged = 0
     changed_titles = []
 
-    for raw_title in list(movies.keys()):
-        original = raw_title
-        cleaned_title = raw_title
+    for raw_key in list(movies.keys()):
+        original_title = raw_key.replace("_", " ")  # Normalize to real title
+        cleaned_title = original_title
 
-        # Remove unwanted words
         for word in unwanted_words:
             cleaned_title = re.sub(rf"(?i)\b{re.escape(word)}\b", "", cleaned_title)
 
-        # Clean extra spaces
         cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
 
         if not cleaned_title:
-            continue  # skip empty title
+            continue
 
-        cleaned_key = clean_firebase_key(cleaned_title)
-        original_key = clean_firebase_key(original)
+        new_key = clean_firebase_key(cleaned_title)
+        old_key = clean_firebase_key(original_title)
 
-        print(f"🔍 {original} → {cleaned_title}")
-
-        # Check if the cleaned key is different enough
-        if cleaned_key == original_key and cleaned_title.lower() == original.lower():
+        if new_key == old_key:
             unchanged += 1
             continue
 
-        # If cleaned title already exists, skip to avoid overwriting
-        if ref.child(cleaned_key).get():
-            print(f"⚠️ Skipped (already exists): {cleaned_title}")
+        if ref.child(new_key).get():
+            print(f"⚠️ Skipped (exists): {cleaned_title}")
             skipped += 1
             continue
 
         try:
-            # Set new key and delete old one
-            ref.child(cleaned_key).set(movies[original])
-            ref.child(original).delete()
-            changed_titles.append(f"{original} → {cleaned_title}")
+            ref.child(new_key).set(movies[raw_key])
+            ref.child(raw_key).delete()
+            changed_titles.append(f"{original_title} → {cleaned_title}")
             cleaned += 1
         except Exception as e:
-            print(f"❌ Failed to rename {original}: {e}")
+            print(f"❌ Failed to clean {original_title}: {e}")
 
     summary = f"✅ Clean complete:\n• Renamed: {cleaned}\n• Skipped (exists): {skipped}\n• Unchanged: {unchanged}"
     await update.message.reply_text(summary)
@@ -343,6 +337,7 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if changed_titles:
         preview = "\n".join(changed_titles[:20])
         await update.message.reply_text(f"*Changed Titles:*\n\n{preview}", parse_mode="Markdown")
+
 
 
 
