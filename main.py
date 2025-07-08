@@ -258,6 +258,28 @@ async def edittitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "edit_title_old" not in context.user_data:
+        return  # No edit in progress
+
+    new_title = update.message.text.strip()
+    old_title = context.user_data.pop("edit_title_old")
+
+    old_key = clean_firebase_key(old_title)
+    new_key = clean_firebase_key(new_title)
+
+    movie = ref.child(old_key).get()
+    if not movie:
+        return await update.message.reply_text("❌ Original movie not found.")
+
+    # Save movie under new title, delete old entry
+    ref.child(new_key).set(movie)
+    ref.child(old_key).delete()
+
+    await send_temp_log(
+        context, update.effective_chat.id,
+        f"✅ Title updated:\n`{old_title}` → `{new_title}`"
+    )
 
 
 
@@ -344,41 +366,9 @@ async def show_movie_page(user_id, context, send_func):
     )
     user_last_bot_message[user_id] = msg.message_id
 
-async def edittitle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
 
-    data = query.data
-    if not data.startswith("edit_title_select|"):
-        return
 
-    old_title = data.split("|", 1)[1]
-    context.user_data["edit_title_old"] = old_title
 
-    await query.message.reply_text(
-        f"✏️ Send the new title for:\n`{old_title}`",
-        parse_mode="Markdown"
-    )
-
-async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "edit_title_old" not in context.user_data:
-        return  # not editing anything
-
-    old_title = context.user_data.pop("edit_title_old")
-    new_title = update.message.text.strip()
-
-    old_key = clean_firebase_key(old_title)
-    new_key = clean_firebase_key(new_title)
-
-    movie = ref.child(old_key).get()
-    if not movie:
-        return await update.message.reply_text("❌ Original movie not found.")
-
-    # Update title
-    ref.child(new_key).set(movie)
-    ref.child(old_key).delete()
-
-    await send_temp_log(context, update.effective_chat.id, f"✅ Title updated:\n`{old_title}` → `{new_title}`",)
 
 
 async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -456,6 +446,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ref.set({})  # Clears the 'movies' node
         await query.edit_message_text("✅ All movies have been deleted from the database.")
 
+    elif query.data.startswith("edit_title_select|"):
+        old_title = query.data.split("|", 1)[1]
+        context.user_data["edit_title_old"] = old_title
+
+        await query.message.reply_text(
+            f"✏️ Send the new title for:\n`{old_title}`",
+            parse_mode="Markdown"
+        )
+       
+    
+
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -483,7 +484,6 @@ telegram_app.add_handler(CallbackQueryHandler(button_handler))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
-telegram_app.add_handler(CallbackQueryHandler(edittitle_callback, pattern="^edit_title_select\\|"))
 telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_new_title))
 
 @app.on_event("startup")
