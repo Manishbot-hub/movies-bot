@@ -288,6 +288,8 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("⛔ Not authorized.")
 
     print("✅ /cleantitles triggered")
+
+    # List of words to remove
     unwanted_words = [
         "download", "full movie", "watch", "online",
         "free", "movie", "hd", "bluray", "web-dl"
@@ -299,44 +301,49 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     unchanged = 0
     changed_titles = []
 
-    for raw_key in list(movies.keys()):
-        original_title = raw_key.replace("_", " ")  # Normalize to real title
-        cleaned_title = original_title
+    for key in list(movies.keys()):
+        # Work directly on actual Firebase keys
+        cleaned_title = key
 
+        # Remove unwanted words (case-insensitive, whole words)
         for word in unwanted_words:
             cleaned_title = re.sub(rf"(?i)\b{re.escape(word)}\b", "", cleaned_title)
 
+        # Clean extra spaces and trim
         cleaned_title = re.sub(r"\s{2,}", " ", cleaned_title).strip()
 
-        if not cleaned_title:
-            continue
-
-        new_key = clean_firebase_key(cleaned_title)
-        old_key = clean_firebase_key(original_title)
-
-        if new_key == old_key:
+        # Skip if nothing changed
+        if cleaned_title == key:
             unchanged += 1
             continue
 
+        # Use cleaned key
+        new_key = clean_firebase_key(cleaned_title)
+
+        # Avoid overwrite if cleaned key already exists
         if ref.child(new_key).get():
-            print(f"⚠️ Skipped (exists): {cleaned_title}")
+            print(f"⚠️ Skipped (already exists): {new_key}")
             skipped += 1
             continue
 
+        # Rename in Firebase
         try:
-            ref.child(new_key).set(movies[raw_key])
-            ref.child(raw_key).delete()
-            changed_titles.append(f"{original_title} → {cleaned_title}")
+            ref.child(new_key).set(movies[key])
+            ref.child(key).delete()
             cleaned += 1
+            changed_titles.append(f"{key} → {new_key}")
+            print(f"✅ Renamed: {key} → {new_key}")
         except Exception as e:
-            print(f"❌ Failed to clean {original_title}: {e}")
+            print(f"❌ Error renaming {key}: {e}")
 
-    summary = f"✅ Clean complete:\n• Renamed: {cleaned}\n• Skipped (exists): {skipped}\n• Unchanged: {unchanged}"
+    # Final report
+    summary = f"✅ Clean complete:\n• Renamed: {cleaned}\n• Skipped: {skipped}\n• Unchanged: {unchanged}"
     await update.message.reply_text(summary)
 
     if changed_titles:
         preview = "\n".join(changed_titles[:20])
         await update.message.reply_text(f"*Changed Titles:*\n\n{preview}", parse_mode="Markdown")
+
 
 
 
