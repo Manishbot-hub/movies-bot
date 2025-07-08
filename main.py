@@ -106,11 +106,17 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("⛔ Not authorized.")
 
     # Get input from uploaded file or message text
+    file = None
     if update.message.document:
         file = await update.message.document.get_file()
+    elif update.message.reply_to_message and update.message.reply_to_message.document:
+        file = await update.message.reply_to_message.document.get_file()
+
+    if file:
         text = (await file.download_as_bytearray()).decode("utf-8")
     else:
         text = update.message.text or ""
+
 
     # Fix potential BOM encoding issues
     text = text.lstrip("\ufeff")
