@@ -161,9 +161,9 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    # 🔒 Prevent duplicate runs
     if context.bot_data.get("upload_running", False):
         return await update.message.reply_text("⚠️ Upload already in progress. Try again later.")
+    
     context.bot_data["upload_running"] = True
 
     try:
@@ -184,6 +184,12 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = text.strip().splitlines()
         print(f"📄 Read {len(lines)} lines from uploaded file")
 
+        # ✅ Counters
+        added_count = 0
+        skipped_count = 0
+        failed_count = 0
+        total_lines = len(lines)
+
         for line in lines:
             line = line.strip()
             if not line:
@@ -194,28 +200,34 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 title = " ".join(parts[:-2])
                 quality = parts[-2]
                 link = parts[-1]
-                print(f"✅ Parsed line: {title} {quality} {link}")
             else:
-                print(f"⚠️ Skipped invalid line: {line}")
-                await send_temp_log_rate_limited(context, update.effective_chat.id, f"⚠️ Skipped invalid line: {line}")
+                failed_count += 1
                 continue
 
             safe_key = clean_firebase_key(title)
             movie = ref.child(safe_key).get() or {}
 
             if quality in movie:
-                print(f"⚠️ Already exists: {title} {quality}")
-                await send_temp_log_rate_limited(context, update.effective_chat.id, f"⚠️ Skipped: {title}  {quality} already exists")
+                skipped_count += 1
                 continue
 
             try:
                 short_url = await asyncio.to_thread(_shorten_url_sync, link)
                 ref.child(safe_key).update({quality: short_url})
-                print(f"✅ Saved to Firebase: {title} {quality} -> {short_url}")
-                await send_temp_log_rate_limited(context, update.effective_chat.id, f"✅ Added: {title}  {quality}  {short_url}")
+                added_count += 1
             except Exception as e:
-                print(f"❌ Failed to save: {title} {quality} — {e}")
-                await send_temp_log(context, update.effective_chat.id, f"❌ Failed: {title}  {quality} — error saving or shortening link")
+                failed_count += 1
+
+        # ✅ Summary message
+        summary = (
+            f"✅ *Upload Summary:*\n\n"
+            f"• ✅ Successfully uploaded: *{added_count}*\n"
+            f"• ⚠️ Skipped (already exists): *{skipped_count}*\n"
+            f"• ❌ Failed to upload/shorten: *{failed_count}*\n"
+            f"• 🧾 Total lines processed: *{total_lines}*"
+        )
+        await update.message.reply_text(summary, parse_mode="Markdown")
+
     finally:
         context.bot_data["upload_running"] = False
 
