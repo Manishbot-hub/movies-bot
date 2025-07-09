@@ -84,6 +84,14 @@ async def shorten_link(link: str) -> str:
 def get_movies():
     return ref.get() or {}
 
+def find_existing_title_case_insensitive(new_title: str, all_movies: dict) -> str | None:
+    new_title_normalized = new_title.strip().lower()
+    for existing_title in all_movies.keys():
+        if existing_title.strip().lower() == new_title_normalized:
+            return existing_title  # Return the actual Firebase key
+    return None
+
+
 async def delete_last(user_id, context):
     if user_id in user_last_bot_message:
         try:
@@ -242,8 +250,11 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 failed_count += 1
                 continue
 
-            safe_key = clean_firebase_key(title)
-            movie = ref.child(safe_key).get() or {}
+            movies = get_movies()
+            existing_key = find_existing_title_case_insensitive(title, movies)
+            safe_key = clean_firebase_key(existing_key if existing_key else title)
+            movie = movies.get(safe_key, {})
+
 
             if quality in movie:
                 skipped_count += 1
