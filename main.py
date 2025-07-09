@@ -209,34 +209,31 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.bot_data.get("upload_running", False):
         return await update.message.reply_text("⚠️ Upload already in progress. Try again later.")
-    
     context.bot_data["upload_running"] = True
 
     try:
-        print("🚀 /uploadbulk triggered")
-
         doc = update.message.document
         if not doc or not doc.file_name.lower().endswith('.txt'):
             return await update.message.reply_text("⚠️ Please send a valid .txt file after /uploadbulk.")
 
-        try:
-            file_obj = await doc.get_file()
-            content = await file_obj.download_as_bytearray()
-            text = content.decode("utf-8", errors="ignore")
-        except Exception as e:
-            print(f"❌ File read error: {e}")
-            return await update.message.reply_text("❌ Failed to download or read the file.")
+        file_obj = await doc.get_file()
+        content = await file_obj.download_as_bytearray()
+        text = content.decode("utf-8", errors="ignore")
 
         lines = text.strip().splitlines()
-        print(f"📄 Read {len(lines)} lines from uploaded file")
-
-        # ✅ Counters
-        added_count = 0
-        skipped_count = 0
-        failed_count = 0
         total_lines = len(lines)
 
-        for line in lines:
+        await update.message.reply_text(f"📄 Received `.txt` file with {total_lines} lines.\n⏳ Starting upload...", parse_mode="Markdown")
+
+        # Load existing movies once
+        movies = get_movies()
+
+        success_count = 0
+        exists_count = 0
+        failed_count = 0
+        invalid_count = 0
+
+        for idx, line in enumerate(lines, start=1):
             line = line.strip()
             if not line:
                 continue
@@ -247,38 +244,52 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 quality = parts[-2]
                 link = parts[-1]
             else:
-                failed_count += 1
+                invalid_count += 1
                 continue
 
-            movies = get_movies()
             existing_key = find_existing_title_case_insensitive(title, movies)
             safe_key = clean_firebase_key(existing_key if existing_key else title)
             movie = movies.get(safe_key, {})
 
-
             if quality in movie:
-                skipped_count += 1
+                exists_count += 1
                 continue
 
             try:
                 short_url = await asyncio.to_thread(_shorten_url_sync, link)
                 ref.child(safe_key).update({quality: short_url})
-                added_count += 1
+                success_count += 1
             except Exception as e:
                 failed_count += 1
+                continue
 
-        # ✅ Summary message
+            # Show progress every 10 movies
+            if idx % 10 == 0 or idx == total_lines:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=f"⏳ Processing movies: `{idx}/{total_lines}`",
+                    parse_mode="Markdown"
+                )
+                await asyncio.sleep(0.3)
+
+        # Final summary
         summary = (
-            f"✅ *Upload Summary:*\n\n"
-            f"• ✅ Successfully uploaded: *{added_count}*\n"
-            f"• ⚠️ Skipped (already exists): *{skipped_count}*\n"
-            f"• ❌ Failed to upload/shorten: *{failed_count}*\n"
-            f"• 🧾 Total lines processed: *{total_lines}*"
+            f"✅ *Upload Complete!*\n"
+            f"• Total: {total_lines}\n"
+            f"• Uploaded: {success_count}\n"
+            f"• Already Exists: {exists_count}\n"
+            f"• Failed: {failed_count}\n"
+            f"• Invalid Lines: {invalid_count}"
         )
-        await update.message.reply_text(summary, parse_mode="Markdown")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=summary, parse_mode="Markdown")
 
+    except Exception as e:
+        logging.error(f"❌ Unexpected error: {e}")
+        await update.message.reply_text("❌ Something went wrong during upload.")
     finally:
         context.bot_data["upload_running"] = False
+
+
 
 
 
