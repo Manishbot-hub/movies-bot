@@ -373,6 +373,8 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+
 async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     requests_ref = db.reference("Requests")
     requests_data = requests_ref.get()
@@ -381,18 +383,18 @@ async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ No movie requests found.")
 
     reply_lines = []
-    for user_id, titles in requests_data.items():
-        for title in titles:
-            # Escape both title and user_id properly
-            safe_title = escape_markdown(title, version=2)
-            safe_user = escape_markdown(str(user_id), version=2)
-            reply_lines.append(f"• {safe_title} \\(User: `{safe_user}`\\)")
+    for key, info in requests_data.items():
+        title = escape_markdown(info.get("title", "Unknown"), version=2)
+        user = escape_markdown(str(info.get("user", "Unknown")), version=2)
+        timestamp = escape_markdown(info.get("timestamp", ""), version=2)
+        reply_lines.append(f"• *{title}* \\(User: `{user}`\\)")
 
     reply_text = "\n".join(reply_lines)
     await update.message.reply_text(
-        f"*🗂️ Movie Requests:*\n\n{reply_text}",
+        f"*📂 Movie Requests:*\n\n{reply_text}",
         parse_mode="MarkdownV2"
     )
+
 
 
 
