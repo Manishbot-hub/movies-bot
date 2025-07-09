@@ -133,13 +133,11 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
         if not update.message or not update.message.text:
            return
 
-
         if not reason or len(reason) < 3:
             await update.message.reply_text("⚠️ Report reason too short. Report canceled.")
             return
 
         user_reported_movies.setdefault(user_id, set()).add(title)
-
         await update.message.reply_text("✅ Thanks! Your report has been sent to the admin.")
 
         try:
@@ -148,12 +146,6 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
                 text=f"⚠️ *New Broken Link Report*\n🎬 *{title.replace('_',' ')}*\n👤 User: `{user_id}`\n📝 Reason: _{reason}_",
                 parse_mode="Markdown"
            )
-        except Exception:
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=f"[REPORT] {title.replace('_', ' ')}\nUser: {user_id}\nReason: {reason}"
-           )
-
         except Exception as e:
             logging.warning(f"❌ Failed to notify admin: {e}")
         return
@@ -162,69 +154,36 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
     if "edit_title_old" in context.user_data:
         return await handle_new_title(update, context)
 
+    # 🎬 Handle movie request
     if context.user_data.get("awaiting_movie_request"):
-    context.user_data.pop("awaiting_movie_request")
-    movie_title = update.message.text.strip()
+        context.user_data.pop("awaiting_movie_request")
+        movie_title = update.message.text.strip()
 
-    if not movie_title or len(movie_title) < 3:
-        await update.message.reply_text("❌ Invalid request. Please try again with a proper title.")
+        if not movie_title or len(movie_title) < 3:
+            await update.message.reply_text("❌ Invalid request. Please try again with a proper title.")
+            return
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        user = update.effective_user
+        request_key = f"{user.username or user.id}_{timestamp}"
+
+        db.reference("Requests").child(request_key).set({
+            "title": movie_title,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "first_name": user.first_name,
+            },
+            "timestamp": timestamp
+        })
+
+        await update.message.reply_text("✅ Your movie request has been sent to the admin. Thanks!")
         return
-
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    user = update.effective_user
-    request_key = f"{user.username or user.id}_{timestamp}"
-
-    db.reference("Requests").child(request_key).set({
-        "title": movie_title,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "first_name": user.first_name,
-        },
-        "timestamp": timestamp
-    })
-
-    await update.message.reply_text("✅ Your movie request has been sent to the admin. Thanks!")
-    return
-✅ Final Structure (for clarity):
-python
-Copy
-Edit
-# ✏️ Handle title rename
-if "edit_title_old" in context.user_data:
-    return await handle_new_title(update, context)
-
-# 🎬 Handle movie request submission
-if context.user_data.get("awaiting_movie_request"):
-    context.user_data.pop("awaiting_movie_request")
-    movie_title = update.message.text.strip()
-
-    if not movie_title or len(movie_title) < 3:
-        await update.message.reply_text("❌ Invalid request. Please try again with a proper title.")
-        return
-
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    user = update.effective_user
-    request_key = f"{user.username or user.id}_{timestamp}"
-
-    db.reference("Requests").child(request_key).set({
-        "title": movie_title,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "first_name": user.first_name,
-        },
-        "timestamp": timestamp
-    })
-
-    await update.message.reply_text("✅ Your movie request has been sent to the admin. Thanks!")
-    return
 
     # 🔍 Fallback to movie search
     await delete_last(user_id, context)
     return await search_movie(update, context)
+
 
 
 
