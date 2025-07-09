@@ -370,27 +370,26 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return await update.message.reply_text("⛔ Not authorized.")
+from telegram.helpers import escape_markdown
 
+async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     requests_ref = db.reference("Requests")
     requests_data = requests_ref.get()
 
     if not requests_data:
-        return await update.message.reply_text("✅ No movie requests found.")
+        return await update.message.reply_text("❌ No movie requests found.")
 
-    messages = []
-    for key, entry in requests_data.items():
-        user = entry.get("user", {})
-        title = entry.get("title", "Unknown")
-        timestamp = entry.get("timestamp", "Unknown")
+    reply_lines = []
+    for user_id, titles in requests_data.items():
+        for title in titles:
+            safe_title = escape_markdown(title, version=2)
+            reply_lines.append(f"• {safe_title} (User: `{user_id}`)")
 
-        user_info = f"{user.get('first_name', '')} (@{user.get('username', '')})" if user.get("username") else user.get("id", "Unknown ID")
-        messages.append(f"🎬 *{title}*\n👤 {user_info}\n🕒 {timestamp}")
-
-    reply_text = "\n\n".join(messages[:20])  # limit to 20 entries
-    await update.message.reply_text(f"🗂️ *Movie Requests:*\n\n{reply_text}", parse_mode="Markdown")
+    reply_text = "\n".join(reply_lines)
+    await update.message.reply_text(
+        f"🗂️ *Movie Requests:*\n\n{reply_text}",
+        parse_mode="MarkdownV2"
+    )
 
 
 
