@@ -8,6 +8,7 @@ import json
 import asyncio
 import logging
 import firebase_admin
+from datetime import datetime
 from firebase_admin import credentials, db
 from fastapi import FastAPI, Request
 import uvicorn
@@ -43,6 +44,7 @@ user_last_bot_message = {}
 pending_reports = {}  # user_id -> title_being_reported
 last_user_message_time = {}
 user_movie_offset = {}  # For pagination
+movie_requests = {}  # user_id -> timestamp for rate limiting
 user_reported_movies = {}
 MOVIES_PER_PAGE = 10
 
@@ -160,6 +162,66 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
     if "edit_title_old" in context.user_data:
         return await handle_new_title(update, context)
 
+    if context.user_data.get("awaiting_movie_request"):
+    context.user_data.pop("awaiting_movie_request")
+    movie_title = update.message.text.strip()
+
+    if not movie_title or len(movie_title) < 3:
+        await update.message.reply_text("❌ Invalid request. Please try again with a proper title.")
+        return
+
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    user = update.effective_user
+    request_key = f"{user.username or user.id}_{timestamp}"
+
+    db.reference("Requests").child(request_key).set({
+        "title": movie_title,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+        },
+        "timestamp": timestamp
+    })
+
+    await update.message.reply_text("✅ Your movie request has been sent to the admin. Thanks!")
+    return
+✅ Final Structure (for clarity):
+python
+Copy
+Edit
+# ✏️ Handle title rename
+if "edit_title_old" in context.user_data:
+    return await handle_new_title(update, context)
+
+# 🎬 Handle movie request submission
+if context.user_data.get("awaiting_movie_request"):
+    context.user_data.pop("awaiting_movie_request")
+    movie_title = update.message.text.strip()
+
+    if not movie_title or len(movie_title) < 3:
+        await update.message.reply_text("❌ Invalid request. Please try again with a proper title.")
+        return
+
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    user = update.effective_user
+    request_key = f"{user.username or user.id}_{timestamp}"
+
+    db.reference("Requests").child(request_key).set({
+        "title": movie_title,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+        },
+        "timestamp": timestamp
+    })
+
+    await update.message.reply_text("✅ Your movie request has been sent to the admin. Thanks!")
+    return
+
     # 🔍 Fallback to movie search
     await delete_last(user_id, context)
     return await search_movie(update, context)
@@ -200,6 +262,20 @@ async def delete_after_delay(context, chat_id, message_id, delay=10):
         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
     except Exception as e:
         logging.warning(f"Delete failed: {e}")
+
+async def request_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+
+    # ⏳ Anti-spam: 5 min cooldown
+    now = time.time()
+    if user_id in movie_requests and now - movie_requests[user_id] < 300:
+        return await update.message.reply_text("⏳ Please wait before sending another request.")
+
+    movie_requests[user_id] = now
+    context.user_data["awaiting_movie_request"] = True
+
+    await update.message.reply_text("🎬 Please type the name of the movie you want to request:")        
 
 
 
@@ -332,6 +408,31 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         return await send_temp_log(context, update.effective_chat.id,
             f"❌ Failed: {title}  {quality} — error shortening or saving link")
+
+
+
+async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    requests_ref = db.reference("Requests")
+    requests_data = requests_ref.get()
+
+    if not requests_data:
+        return await update.message.reply_text("✅ No movie requests found.")
+
+    messages = []
+    for key, entry in requests_data.items():
+        user = entry.get("user", {})
+        title = entry.get("title", "Unknown")
+        timestamp = entry.get("timestamp", "Unknown")
+
+        user_info = f"{user.get('first_name', '')} (@{user.get('username', '')})" if user.get("username") else user.get("id", "Unknown ID")
+        messages.append(f"🎬 *{title}*\n👤 {user_info}\n🕒 {timestamp}")
+
+    reply_text = "\n\n".join(messages[:20])  # limit to 20 entries
+    await update.message.reply_text(f"🗂️ *Movie Requests:*\n\n{reply_text}", parse_mode="Markdown")
+
 
 
 
@@ -664,6 +765,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("addmovie", add_movie))
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
+telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
+telegram_app.add_handler(CommandHandler("request", view_requests))
 telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
