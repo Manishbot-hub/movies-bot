@@ -8,6 +8,7 @@ import json
 import asyncio
 import logging
 import firebase_admin
+from telegram.helpers import escape_markdown
 from datetime import datetime
 from firebase_admin import credentials, db
 from fastapi import FastAPI, Request
@@ -370,7 +371,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-from telegram.helpers import escape_markdown
+
 
 async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     requests_ref = db.reference("Requests")
@@ -382,14 +383,17 @@ async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_lines = []
     for user_id, titles in requests_data.items():
         for title in titles:
+            # Escape both title and user_id properly
             safe_title = escape_markdown(title, version=2)
-            reply_lines.append(f"• {safe_title} (User: `{user_id}`)")
+            safe_user = escape_markdown(str(user_id), version=2)
+            reply_lines.append(f"• {safe_title} \\(User: `{safe_user}`\\)")
 
     reply_text = "\n".join(reply_lines)
     await update.message.reply_text(
-        f"🗂️ *Movie Requests:*\n\n{reply_text}",
+        f"*🗂️ Movie Requests:*\n\n{reply_text}",
         parse_mode="MarkdownV2"
     )
+
 
 
 
