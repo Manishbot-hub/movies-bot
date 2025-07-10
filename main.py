@@ -104,9 +104,25 @@ async def delete_last(user_id, context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_last(update.effective_user.id, context)
+
+    user = update.effective_user
+    user_id = str(user.id)
+
+    try:
+        user_ref = db.reference("Users").child(user_id)
+        if not user_ref.get():
+            user_ref.set({
+                "first_name": user.first_name,
+                "username": user.username,
+                "joined": datetime.utcnow().isoformat()
+            })
+    except Exception as e:
+        logging.warning(f"❌ Failed to save user: {e}")
+
     text = "\U0001F44B Welcome to Movies World! Use /search to get your favourite movies🎦🎦, Type any movie name, or /movies to browse."
     msg = await update.message.reply_text(text)
-    user_last_bot_message[update.effective_user.id] = msg.message_id
+    user_last_bot_message[user.id] = msg.message_id
+
 
 def safe_callback_data(prefix: str, identifier: str) -> str:
     """
@@ -394,6 +410,20 @@ async def view_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"*📂 Movie Requests:*\n\n{reply_text}",
         parse_mode="MarkdownV2"
     )
+
+async def show_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    try:
+        users_ref = db.reference("Users")
+        all_users = users_ref.get() or {}
+        count = len(all_users)
+        await update.message.reply_text(f"👥 Total users: {count}")
+    except Exception as e:
+        await update.message.reply_text("❌ Error reading user stats.")
+        logging.warning(f"Failed to fetch user stats: {e}")
 
 
 
@@ -744,6 +774,8 @@ telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
 # ✅ Handles both title edit and general text search
 telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_title_or_search))
+telegram_app.add_handler(CommandHandler("stats", show_user_stats))
+
 
 
 
