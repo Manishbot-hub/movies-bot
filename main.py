@@ -768,13 +768,13 @@ telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
-
+telegram_app.add_handler(CommandHandler("stats", show_user_stats))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
 # ✅ Handles both title edit and general text search
 telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_title_or_search))
-telegram_app.add_handler(CommandHandler("stats", show_user_stats))
+
 
 
 
