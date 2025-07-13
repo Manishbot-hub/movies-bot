@@ -119,7 +119,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.warning(f"❌ Failed to save user: {e}")
 
-    text = "\U0001F44B Welcome to Movies World! Use /search to get your favourite movies🎦🎦, Type any movie name, or /movies to browse."
+    text = "\U0001F44B Welcome to Movies World! Use /search to get your favourite movies🎦🎦, Type any movie name,/movies to browse and /requestmovie to request a movie"
     msg = await update.message.reply_text(text)
     user_last_bot_message[user.id] = msg.message_id
 
