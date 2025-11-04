@@ -1,2 +1,5 @@
 #!/bin/bash
-uvicorn main:fastapi_app --host 0.0.0.0 --port 10000
+PORT=${PORT:-8000}
+exec uvicorn main:app --host 0.0.0.0 --port $PORT
+
+
