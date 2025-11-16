@@ -56,32 +56,41 @@ def clean_firebase_key(key: str) -> str:
 
 
 def _shorten_url_sync(link: str) -> str:
-    """Synchronously call ShrinkMe to shorten a link."""
-    url = f"https://shrinkme.io/api?api={SHRINKME_API}&url={link}"
+    """Synchronously call Earn4Link to shorten a link."""
+    API_KEY = os.getenv("EARN4LINK_API")
+    if not API_KEY:
+        logging.error("❌ EARN4LINK_API missing in Railway variables!")
+        return link  # fallback if no API key found
+
+    url = f"https://earn4link.in/api?api={API_KEY}&url={link}"
     logging.info(f"Shortener called: {url}")
 
     try:
-        resp = requests.get(url, timeout=5)
+        resp = requests.get(url, timeout=10)
         resp.raise_for_status()
 
         try:
             data = resp.json()
             logging.info(f"Shortener response: {data}")
+
+            # Earn4link success response example:
+            # {"status":"success","shortenedUrl":"https://earn4link.in/abcd123"}
+
             if data.get("status") == "success" and data.get("shortenedUrl"):
                 return data["shortenedUrl"]
+
         except json.JSONDecodeError:
-            logging.warning("Shortener response was not JSON. Response text: %s", resp.text)
+            logging.warning(f"Invalid JSON from Earn4Link: {resp.text}")
 
     except Exception as e:
-        logging.warning(f"Shortener request failed: {e}")
+        logging.error(f"Earn4Link shortener request failed: {e}")
 
-    return link  # fallback
-
+    return link  # fallback (send long link)
+    
 
 async def shorten_link(link: str) -> str:
     """Async wrapper: runs the sync function in a thread."""
     return await asyncio.to_thread(_shorten_url_sync, link)
-
 
 
 def get_movies():
