@@ -32,6 +32,9 @@ FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
 SHRINKME_API = os.getenv("SHRINKME_API")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
+TMDB_TOKEN = os.getenv("TMDB_TOKEN", "")  # put your TMDB v4 token in Railway env
+TMDB_BASE_URL = "https://api.themoviedb.org/3"
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
 if not firebase_admin._apps:
     cred = credentials.Certificate(FIREBASE_KEY)
@@ -436,9 +439,65 @@ async def show_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+async def scan_posters(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin only: go through all movies and fetch poster for missing ones."""
+    if update.effective_user.id != ADMIN_ID:
+        return
 
+    movies_ref = db.reference("movies")
+    movies = movies_ref.get() or {}
 
+    missing = []
+    for title, data in movies.items():
+        meta = (data or {}).get("meta") or {}
+        if not meta.get("poster"):   # no poster saved yet
+            missing.append(title)
 
+    if not missing:
+        await update.message.reply_text("✅ All movies already have posters saved.")
+        return
+
+    await update.message.reply_text(
+        f"🖼 Found {len(missing)} movies/series without posters.\n"
+        f"Starting TMDB scan… (this may take a bit)."
+    )
+
+    updated = 0
+    for title in missing:
+        await ensure_poster_for_movie(title)
+        updated += 1
+        # small sleep to be nice with TMDB
+        if updated % 10 == 0:
+            await asyncio.sleep(1)
+
+    await update.message.reply_text(f"✅ Poster scan finished. Updated {updated} titles.")
+
+async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin only: show titles where meta.year is missing."""
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    movies = db.reference("movies").get() or {}
+    missing = []
+    for title, data in movies.items():
+        meta = (data or {}).get("meta") or {}
+        if not meta.get("year"):
+            missing.append(title)
+
+    if not missing:
+        await update.message.reply_text("✅ Every movie/series has a year in meta.")
+        return
+
+    # limit to avoid Telegram flood
+    missing_sorted = sorted(missing)
+    shown = missing_sorted[:80]
+
+    text_lines = [f"• {t}" for t in shown]
+    reply = "🎬 *Movies/Series without year in meta:*\n\n" + "\n".join(text_lines)
+    if len(missing_sorted) > len(shown):
+        reply += f"\n\n…and {len(missing_sorted) - len(shown)} more."
+
+    await update.message.reply_text(reply, parse_mode="Markdown")
 
 
 async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -563,7 +622,128 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
         preview = "\n".join(changed_titles[:20])
         await update.message.reply_text(f"*Changed Titles:*\n\n{preview}", parse_mode="Markdown")
 
+def extract_title_and_year(raw_title: str) -> tuple[str, str | None]:
+    """
+    Try to get a clean title + year (if present) from the Firebase title.
+    Works for titles with or without year.
+    """
+    # find first 4-digit year like 1999, 2024 etc.
+    m = re.search(r"(19|20)\d{2}", raw_title)
+    year = m.group(0) if m else None
 
+    clean_title = raw_title
+    if year:
+        # remove '(2024)' / '[2024]' / '2024' from title string
+        clean_title = re.sub(r"(\(|\[)?\s*" + year + r"\s*(\)|\])?", "", clean_title).strip()
+
+    # small clean-ups
+    clean_title = clean_title.replace("S01", "").replace("S1", "").strip(" -:()[]")
+    return clean_title, year
+
+
+def _fetch_tmdb_meta_sync(title: str, year: str | None) -> dict | None:
+    """
+    Blocking TMDB call (runs in thread). Returns meta dict or None.
+    """
+    if not TMDB_TOKEN:
+        logging.warning("TMDB_TOKEN missing, skip poster fetch")
+        return None
+
+    params = {
+        "query": title,
+        "include_adult": "false",
+        "page": 1,
+    }
+    if year:
+        params["year"] = year
+
+    headers = {
+        "Authorization": f"Bearer {TMDB_TOKEN}",
+        "Accept": "application/json",
+    }
+
+    try:
+        resp = requests.get(
+            f"{TMDB_BASE_URL}/search/multi",
+            params=params,
+            headers=headers,
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results") or []
+        if not results:
+            logging.info(f"TMDB: no results for '{title}' ({year})")
+            return None
+
+        # prefer movie/tv results
+        picked = None
+        for r in results:
+            if r.get("media_type") in ("movie", "tv"):
+                picked = r
+                break
+        if picked is None:
+            picked = results[0]
+
+        poster_path = picked.get("poster_path")
+        poster_url = TMDB_IMAGE_BASE + poster_path if poster_path else None
+
+        if picked.get("media_type") == "tv":
+            date = picked.get("first_air_date") or ""
+        else:
+            date = picked.get("release_date") or ""
+
+        found_year = date[:4] if len(date) >= 4 else None
+        if not found_year:
+            found_year = year
+
+        meta = {
+            "tmdb_id": picked.get("id"),
+            "poster": poster_url,
+            "year": found_year,
+            "is_series": picked.get("media_type") == "tv",
+            "tmdb_title": picked.get("name") or picked.get("title") or title,
+        }
+        logging.info(f"TMDB meta for '{title}': {meta}")
+        return meta
+
+    except Exception as e:
+        logging.warning(f"TMDB fetch failed for '{title}' ({year}): {e}")
+        return None
+
+
+async def fetch_tmdb_meta_for_title(firebase_title: str) -> dict | None:
+    """
+    Async wrapper: clean title + year, then call TMDB in a thread.
+    Works for titles with and without year in the name.
+    """
+    clean_title, year = extract_title_and_year(firebase_title)
+    return await asyncio.to_thread(_fetch_tmdb_meta_sync, clean_title, year)
+
+
+async def ensure_poster_for_movie(movie_key: str, force: bool = False) -> None:
+    """
+    Ensure movie at movies/<movie_key> has meta.poster + meta.year.
+    If force=True, always refresh from TMDB.
+    """
+    movies_ref = db.reference("movies")
+    movie_data = movies_ref.child(movie_key).get() or {}
+    meta = movie_data.get("meta") or {}
+
+    if not force and meta.get("poster") and meta.get("year"):
+        # already have poster + year
+        return
+
+    tmdb_meta = await fetch_tmdb_meta_for_title(movie_key)
+    if not tmdb_meta:
+        return
+
+    meta.update(tmdb_meta)
+    try:
+        movies_ref.child(movie_key).update({"meta": meta})
+        logging.info(f"Saved TMDB meta for '{movie_key}'")
+    except Exception as e:
+        logging.warning(f"Failed to save TMDB meta for '{movie_key}': {e}")
 
 
 
@@ -772,6 +952,8 @@ telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
 telegram_app.add_handler(CommandHandler("request", view_requests))
 telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
+application.add_handler(CommandHandler("scanposters", scan_posters))
+application.add_handler(CommandHandler("missingyear", list_missing_year))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
