@@ -985,7 +985,7 @@ telegram_app.add_handler(CommandHandler("request", view_requests))
 telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
-telegram_app.add_handler(CommandHandler("missingyear", missing_year))
+telegram_app.add_handler(CommandHandler("missingyear", list_missing_year))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
