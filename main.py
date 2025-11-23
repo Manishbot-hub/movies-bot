@@ -830,9 +830,6 @@ async def show_movie_page(user_id, context, send_func):
 
 
 
-
-
-
 async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -841,16 +838,51 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _, title = query.data.split("|", 1)
     movie = get_movies().get(title)
     if not movie:
-        msg = await query.message.reply_text("\u274C Movie not found.")
+        msg = await query.message.reply_text("❌ Movie not found.")
         user_last_bot_message[query.from_user.id] = msg.message_id
         return
 
-    text = f"*{title.replace('_', ' ')}*\n\n"
-    buttons = [[InlineKeyboardButton(f"{quality} \U0001F517", url=link)] for quality, link in movie.items()]
-    buttons.append([InlineKeyboardButton("\u26A0\uFE0F Report Broken Link", callback_data=safe_callback_data("report", title))])
+    # Ensure poster exists (fetch if missing)
+    await ensure_poster_for_movie(title)
 
-    msg = await query.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+    meta = movie.get("meta", {})
+    poster = meta.get("poster")
+    year = meta.get("year")
+
+    caption = f"*{title.replace('_', ' ')}*"
+    if year:
+        caption += f" ({year})"
+    caption += "\n\nSelect quality 👇"
+
+    buttons = [
+        [InlineKeyboardButton(f"{q} 🔗", url=l)]
+        for q, l in movie.items()
+        if q != "meta"
+    ]
+    buttons.append([
+        InlineKeyboardButton("⚠️ Report Broken Link", callback_data=safe_callback_data("report", title))
+    ])
+    markup = InlineKeyboardMarkup(buttons)
+
+    if poster:
+        # Send poster with buttons
+        msg = await query.message.reply_photo(
+            photo=poster,
+            caption=caption,
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+    else:
+        # Fallback if poster missing
+        msg = await query.message.reply_text(
+            caption,
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+
     user_last_bot_message[query.from_user.id] = msg.message_id
+
+
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
