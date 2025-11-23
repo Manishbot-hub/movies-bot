@@ -673,6 +673,25 @@ async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
         preview = "\n".join(changed_titles[:20])
         await update.message.reply_text(f"*Changed Titles:*\n\n{preview}", parse_mode="Markdown")
 
+async def fix_movie_poster(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("Not allowed.")
+
+    args = context.args
+    if len(args) < 2:
+        return await update.message.reply_text("Usage:\n/fixposter MovieTitle URL")
+
+    title = " ".join(args[:-1])
+    url = args[-1]
+    key = clean_firebase_key(title)
+
+    ref = db.reference("movies")
+    if not ref.child(key).get():
+        return await update.message.reply_text("Movie not found.")
+
+    ref.child(key).child("meta").update({"poster": url})
+    await update.message.reply_text("Poster updated! 👌")
+
 def extract_title_and_year(raw_title: str) -> tuple[str, str | None]:
     """
     Try to get a clean title + year (if present) from the Firebase title.
@@ -772,29 +791,66 @@ async def fetch_tmdb_meta_for_title(firebase_title: str) -> dict | None:
     return await asyncio.to_thread(_fetch_tmdb_meta_sync, clean_title, year)
 
 
-async def ensure_poster_for_movie(movie_key: str, force: bool = False) -> None:
-    """
-    Ensure movie at movies/<movie_key> has meta.poster + meta.year.
-    If force=True, always refresh from TMDB.
-    """
-    movies_ref = db.reference("movies")
-    movie_data = movies_ref.child(movie_key).get() or {}
-    meta = movie_data.get("meta") or {}
 
-    if not force and meta.get("poster") and meta.get("year"):
-        # already have poster + year
+async def ensure_poster_for_movie(key: str, force: bool = False):
+    movie_ref = db.reference("movies").child(key)
+    data = movie_ref.get() or {}
+
+    meta = data.get("meta") or {}
+
+    # Skip if already has poster and not force
+    if meta.get("poster") and not force:
         return
 
-    tmdb_meta = await fetch_tmdb_meta_for_title(movie_key)
+    tmdb_meta = await fetch_tmdb_meta_for_title(key)
     if not tmdb_meta:
         return
 
-    meta.update(tmdb_meta)
-    try:
-        movies_ref.child(movie_key).update({"meta": meta})
-        logging.info(f"Saved TMDB meta for '{movie_key}'")
-    except Exception as e:
-        logging.warning(f"Failed to save TMDB meta for '{movie_key}': {e}")
+    # Save MAIN poster for Movie or entire Series
+    movie_ref.child("meta").update({
+        "poster": tmdb_meta.get("poster"),
+        "is_series": tmdb_meta.get("is_series", False),
+        "tmdb_id": tmdb_meta.get("tmdb_id"),
+        "year": tmdb_meta.get("year"),
+        "tmdb_title": tmdb_meta.get("tmdb_title"),
+    })
+
+    # If not a series → stop here
+    if not tmdb_meta.get("is_series"):
+        return
+
+    # Extract Seasons from Keys (Quality lines remain untouched)
+    season_keys = [k for k in data.keys() if re.match(r"S\d{1,2}", k)]
+
+    if not season_keys:
+        return
+
+    headers = {
+        "Authorization": f"Bearer {TMDB_TOKEN}",
+        "Accept": "application/json",
+    }
+
+    tmdb_id = tmdb_meta.get("tmdb_id")
+
+    for season_key in season_keys:
+        season_num = int(re.findall(r"\d+", season_key)[0])
+
+        try:
+            r = requests.get(
+                f"{TMDB_BASE_URL}/tv/{tmdb_id}/season/{season_num}",
+                headers=headers,
+                timeout=10,
+            )
+            r.raise_for_status()
+            season_data = r.json()
+            poster_path = season_data.get("poster_path")
+
+            if poster_path:
+                poster_url = TMDB_IMAGE_BASE + poster_path
+                movie_ref.child(season_key).update({"poster": poster_url})
+
+        except Exception:
+            continue
 
 
 
@@ -894,7 +950,7 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Ensure poster exists (fetch if missing)
-    await ensure_poster_for_movie(title)
+    await ensure_poster_for_movie(title, force=False)
 
     meta = movie.get("meta", {})
     poster = meta.get("poster")
@@ -1057,6 +1113,7 @@ telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
 telegram_app.add_handler(CommandHandler("missingyear", list_missing_year))
 telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
 telegram_app.add_handler(CommandHandler("fixposter", missing_posters))  # open UI same way
+telegram_app.add_handler(CommandHandler("fixposter", fix_movie_poster))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
