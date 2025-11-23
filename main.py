@@ -782,13 +782,64 @@ def _fetch_tmdb_meta_sync(title: str, year: str | None) -> dict | None:
         return None
 
 
-async def fetch_tmdb_meta_for_title(firebase_title: str) -> dict | None:
-    """
-    Async wrapper: clean title + year, then call TMDB in a thread.
-    Works for titles with and without year in the name.
-    """
-    clean_title, year = extract_title_and_year(firebase_title)
-    return await asyncio.to_thread(_fetch_tmdb_meta_sync, clean_title, year)
+async def fetch_tmdb_meta_for_title(title: str):
+    # Clean before TMDB search
+    original_title = title
+
+    # Remove common junk
+    cleaned = re.sub(r'\bS\d{1,2}\b', '', title, flags=re.IGNORECASE)  # Remove S01 / S1 etc
+    cleaned = re.sub(r'\bPart\s?\d+\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\b(480p|720p|1080p|2160p|WEB[- ]?DL|Bluray|Hindi|Dual Audio)\b',
+                     '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+    # Extract year if present
+    year_match = re.search(r'\((\d{4})\)$', cleaned)
+    year = year_match.group(1) if year_match else None
+    if year:
+        cleaned = cleaned.replace(f"({year})", "").strip()
+
+    headers = {
+        "Authorization": f"Bearer {TMDB_TOKEN}",
+        "Accept": "application/json",
+    }
+
+    query_params = {
+        "query": cleaned,
+        "include_adult": "false"
+    }
+
+    # If year exists → use it to improve accuracy
+    if year:
+        query_params["year"] = year
+
+    try:
+        resp = requests.get(f"{TMDB_BASE_URL}/search/multi",
+                            headers=headers, params=query_params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        results = data.get("results", [])
+        if not results:
+            logging.warning(f"TMDB: No results found for {original_title} after cleaning → {cleaned}")
+            return None
+
+        best = results[0]
+
+        meta = {
+            "poster": TMDB_IMAGE_BASE + best.get("poster_path") if best.get("poster_path") else None,
+            "tmdb_id": best.get("id"),
+            "tmdb_title": best.get("title") or best.get("name"),
+            "year": year or (best.get("release_date","")[:4] if best.get("release_date") else ""),
+            "is_series": (best.get("media_type") == "tv")
+        }
+
+        logging.info(f"TMDB MATCH for '{original_title}' → {meta}")
+        return meta
+
+    except Exception as e:
+        logging.error(f"TMDB search failed for {title}: {e}")
+        return None
 
 
 
