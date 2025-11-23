@@ -51,6 +51,8 @@ user_movie_offset = {}  # For pagination
 movie_requests = {}  # user_id -> timestamp for rate limiting
 user_reported_movies = {}
 MOVIES_PER_PAGE = 10
+missing_posters_offset = {}
+POSTERS_PER_PAGE = 10
 
 def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
@@ -154,6 +156,19 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
         if elapsed < 2:
             return
     last_user_message_time[user_id] = now
+
+    # 🎯 Handle manual poster fix input
+    if "fix_poster_title" in context.user_data:
+        old_title = context.user_data.pop("fix_poster_title")
+        new_title = update.message.text.strip()
+
+        poster = await fetch_poster_from_tmdb(new_title, is_series=False)
+        if poster:
+            ref.child(clean_firebase_key(old_title)).update({"poster": poster})
+            await update.message.reply_text("🖼 Poster updated successfully!")
+        else:
+            await update.message.reply_text("❌ Poster not found!")
+        return
 
     # ✏️ Handle report reason input
     if user_id in pending_reports:
@@ -567,7 +582,43 @@ async def handle_new_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ Title updated:\n`{old_title}` → `{new_title}`"
     )
 
+async def missing_posters(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
 
+    user_id = update.effective_user.id
+    missing_posters_offset[user_id] = 0
+    await show_missing_page(update, context)
+
+async def show_missing_page(update, context):
+    user_id = update.effective_user.id
+    movies = get_movies()
+    missing = [t for t, d in movies.items() if "poster" not in d]
+
+    if not missing:
+        return await update.message.reply_text("🎉 All movies have posters!")
+
+    offset = missing_posters_offset.get(user_id, 0)
+    end = offset + POSTERS_PER_PAGE
+    current_page = missing[offset:end]
+
+    keyboard = [
+        [InlineKeyboardButton(t.replace("_", " "), callback_data=f"fixposter|{t}")]
+        for t in current_page
+    ]
+
+    nav = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton("⬅ Prev", callback_data=f"missing_prev"))
+    if end < len(missing):
+        nav.append(InlineKeyboardButton("➡ Next", callback_data=f"missing_next"))
+    if nav:
+        keyboard.append(nav)
+
+    await update.message.reply_text(
+        f"📌 Missing Posters {offset+1}-{min(end,len(missing))} of {len(missing)}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def clean_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -933,8 +984,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
        )
 
+    elif query.data.startswith("fixposter|"):
+        title = query.data.split("|", 1)[1]
+        context.user_data["fix_poster_title"] = title
+        await query.message.reply_text(
+            f"✏️ Send a correct title for poster fetch:\n`{title.replace('_',' ')}`",
+            parse_mode="Markdown"
+       )
 
+    elif query.data == "missing_next":
+        uid = query.from_user.id
+        missing_posters_offset[uid] += POSTERS_PER_PAGE
+        await query.message.delete()
+        await show_missing_page(query, context)
 
+    elif query.data == "missing_prev":
+        uid = query.from_user.id
+        missing_posters_offset[uid] = max(0, missing_posters_offset[uid] - POSTERS_PER_PAGE)
+        await query.message.delete()
+        await show_missing_page(query, context)
+    
     elif query.data.startswith("more|"):
         _, new_offset = query.data.split("|", 1)
         user_movie_offset[user_id] = int(new_offset)
@@ -986,6 +1055,8 @@ telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works 
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
 telegram_app.add_handler(CommandHandler("missingyear", list_missing_year))
+telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
+telegram_app.add_handler(CommandHandler("fixposter", missing_posters))  # open UI same way
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
