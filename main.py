@@ -623,7 +623,7 @@ for t, d in movies.items():
 
     if not missing:
         return await 
-        update.message.reply_text("🎉 All movies have posters!")
+    update.message.reply_text("🎉 All movies have posters!")
 
     offset = missing_posters_offset.get(user_id, 0)
     end = offset + POSTERS_PER_PAGE
