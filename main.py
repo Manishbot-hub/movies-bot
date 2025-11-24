@@ -500,15 +500,15 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not missing:
         return await update.message.reply_text("🎯 All movies/series have a release year.")
 
-    # Sort & limit (avoid Telegram flood)
     missing_sorted = sorted(missing)
     shown = missing_sorted[:80]
 
-    # Escape movie titles + remove underscores for display
-    escaped_lines = [
-        f"• {escape_markdown(t.replace('_', ' '), version=2)}"
-        for t in shown
-    ]
+    escaped_lines = []
+    
+    for t in shown:
+        txt = t.replace("_", " ")  # Replace underscores
+        txt = escape_markdown(txt, version=2)  # Escape special chars
+        escaped_lines.append(f"• {txt}")
 
     reply = "🎬 *Movies/Series Missing Release Year:*\n\n" + "\n".join(escaped_lines)
 
