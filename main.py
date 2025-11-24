@@ -53,6 +53,8 @@ user_reported_movies = {}
 MOVIES_PER_PAGE = 10
 missing_posters_offset = {}
 POSTERS_PER_PAGE = 10
+missing_year_offset = {}
+MISSING_YEAR_PER_PAGE = 50
 
 def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
@@ -488,6 +490,12 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
+    user_id = update.effective_user.id
+    missing_year_offset[user_id] = 0
+    await show_missing_year_page(update, context)
+
+async def show_missing_year_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     movies = db.reference("movies").get() or {}
     missing = []
 
@@ -500,26 +508,39 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("🎯 All movies/series have a release year.")
 
     missing_sorted = sorted(missing)
-    shown = missing_sorted[:80]
+
+    offset = missing_year_offset.get(user_id, 0)
+    end = offset + MISSING_YEAR_PER_PAGE
+    current_page = missing_sorted[offset:end]
 
     escaped_lines = []
-    
-    for t in shown:
-        clean = t.replace("_", " ")
-        clean = escape_markdown(clean, version=2)
+    for t in current_page:
+        clean = escape_markdown(t.replace("_", " "), version=2)
         escaped_lines.append(f"• {clean}")
 
-    text = "🎬 *Movies and Series Missing Release Year:*\n\n" + "\n".join(escaped_lines)
+    text = (
+        "🎬 *Missing Release Year*\n\n"
+        + "\n".join(escaped_lines)
+        + f"\n\n📍 Showing {offset+1}–{min(end,len(missing_sorted))} of {len(missing_sorted)}"
+    )
 
-    if len(missing_sorted) > len(shown):
-        more_count = len(missing_sorted) - len(shown)
-        more_text = f"\n\n…{escape_markdown(str(more_count), version=2)} more not shown"
-        text += more_text
+    text = text.replace(".", "\\.")  # Escape dots
 
-    # Escape *inside text*
-    text = text.replace(".", "\\.")
+    keyboard = []
+    nav = []
 
-    await update.message.reply_text(text, parse_mode="MarkdownV2")
+    if offset > 0:
+        nav.append(InlineKeyboardButton("⬅ Prev", callback_data="year_prev"))
+    if end < len(missing_sorted):
+        nav.append(InlineKeyboardButton("➡ Next", callback_data="year_next"))
+    if nav:
+        keyboard.append(nav)
+
+    await update.message.reply_text(
+        text,
+        parse_mode="MarkdownV2",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -622,7 +643,9 @@ async def fixposter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def show_missing_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    query = update.callback_query if hasattr(update, "callback_query") and update.callback_query else None
+    message = query.message if query else update.message
+    user_id = message.chat.id
     movies = get_movies()
 
     missing = []
@@ -632,7 +655,7 @@ async def show_missing_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
             missing.append(t)
 
     if not missing:
-        return await update.message.reply_text("🎉 All movies have posters!")
+        return await message.reply_text("🎉 All movies have posters!")
 
     offset = missing_posters_offset.get(user_id, 0)
     end = offset + POSTERS_PER_PAGE
@@ -1146,13 +1169,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = query.from_user.id
         missing_posters_offset[uid] += POSTERS_PER_PAGE
         await query.message.delete()
-        await show_missing_page(update.callback_query, context)
+        await show_missing_page(update, context)
 
     elif query.data == "missing_prev":
         uid = query.from_user.id
         missing_posters_offset[uid] = max(0, missing_posters_offset[uid] - POSTERS_PER_PAGE)
         await query.message.delete()
-        await show_missing_page(update.callback_query, context)
+        await show_missing_page(update, context)
+
+    elif query.data == "year_next":
+        uid = query.from_user.id
+        missing_year_offset[uid] += MISSING_YEAR_PER_PAGE
+        await query.message.delete()
+        await show_missing_year_page(update.callback_query, context)
+
+    elif query.data == "year_prev":
+        uid = query.from_user.id
+        missing_year_offset[uid] = max(0, missing_year_offset[uid] - MISSING_YEAR_PER_PAGE)
+        await query.message.delete()
+        await show_missing_year_page(update.callback_query, context)
     
     elif query.data.startswith("more|"):
         _, new_offset = query.data.split("|", 1)
