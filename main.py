@@ -504,12 +504,14 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     missing_sorted = sorted(missing)
     shown = missing_sorted[:80]
 
-    text_lines = [f"• {t}" for t in shown]
-    reply = "🎬 *Movies/Series without year in meta:*\n\n" + "\n".join(text_lines)
-    if len(missing_sorted) > len(shown):
-        reply += f"\n\n…and {len(missing_sorted) - len(shown)} more."
+    escaped = [f"• {escape_markdown(t.replace('_',' '), version=2)}" for t in shown]
 
-    await update.message.reply_text(reply, parse_mode="Markdown")
+    reply = "🎬 *Movies/Series without year in meta:*\n\n" + "\n".join(escaped)
+
+    if len(missing_sorted) > len(shown):
+    reply += f"\n\n…{len(missing_sorted) - len(shown)} more."
+
+    await update.message.reply_text(reply, parse_mode="MarkdownV2")
 
 
 async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
