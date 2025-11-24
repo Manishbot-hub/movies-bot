@@ -157,19 +157,6 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
             return
     last_user_message_time[user_id] = now
 
-    # 🎯 Handle manual poster fix input
-    if "fix_poster_title" in context.user_data:
-        old_title = context.user_data.pop("fix_poster_title")
-        new_title = update.message.text.strip()
-
-        poster = await fetch_poster_from_tmdb(new_title, is_series=False)
-        if poster:
-            ref.child(clean_firebase_key(old_title)).update({"poster": poster})
-            await update.message.reply_text("🖼 Poster updated successfully!")
-        else:
-            await update.message.reply_text("❌ Poster not found!")
-        return
-
     # ✏️ Handle report reason input
     if user_id in pending_reports:
         title = pending_reports.pop(user_id)
@@ -223,6 +210,16 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
 
         await update.message.reply_text("✅ Your movie request has been sent to the admin. Thanks!")
         return
+
+    if "awaiting_poster_url_for" in context.user_data:
+        title = context.user_data.pop("awaiting_poster_url_for")
+        url = update.message.text.strip()
+
+        if not url.startswith("http"):
+            return await update.message.reply_text("❌ Invalid URL. Try again.")
+
+        ref.child(clean_firebase_key(title)).child("meta").update({"poster": url})
+        return await update.message.reply_text("✅ Poster updated successfully!")
 
     # 🔍 Fallback to movie search
     await delete_last(user_id, context)
@@ -589,6 +586,31 @@ async def missing_posters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     missing_posters_offset[user_id] = 0
     await show_missing_page(update, context)
+
+async def fixposter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    # format → /fixposter Movie Title
+    args = context.args
+    if not args:
+        return await update.message.reply_text("Usage:\n/fixposter Movie Title")
+
+    query = " ".join(args).lower()
+    movies = get_movies()
+
+    matches = [t for t in movies if query in t.lower()]
+    if not matches:
+        return await update.message.reply_text("❌ No matching movies found.")
+
+    keyboard = [
+        [InlineKeyboardButton(t.replace("_", " "), callback_data=f"fpselect|{t}")]
+        for t in matches[:10]
+    ]
+    await update.message.reply_text(
+        "🎯 Select the movie to update poster:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def show_missing_page(update, context):
     user_id = update.effective_user.id
@@ -1099,6 +1121,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
        )
 
+    elif query.data.startswith("fpselect|"):
+        title = query.data.split("|", 1)[1]
+        context.user_data["awaiting_poster_url_for"] = title
+        await query.message.reply_text(
+            f"📌 Send poster URL for:\n{title.replace('_', ' ')}"
+        )
+
     elif query.data == "missing_next":
         uid = query.from_user.id
         missing_posters_offset[uid] += POSTERS_PER_PAGE
@@ -1163,8 +1192,7 @@ telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
 telegram_app.add_handler(CommandHandler("missingyear", list_missing_year))
 telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
-telegram_app.add_handler(CommandHandler("fixposter", missing_posters))  # open UI same way
-telegram_app.add_handler(CommandHandler("fixposter", fix_movie_poster))
+telegram_app.add_handler(CommandHandler("fixposter", fixposter_command))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
