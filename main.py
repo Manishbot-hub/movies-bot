@@ -495,7 +495,9 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_missing_year_page(update, context)
 
 async def show_missing_year_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    query = update.callback_query if hasattr(update, "callback_query") and update.callback_query else None
+    message = query.message if query else update.message
+    user_id = message.chat.id
     movies = db.reference("movies").get() or {}
     missing = []
 
@@ -505,7 +507,7 @@ async def show_missing_year_page(update: Update, context: ContextTypes.DEFAULT_T
             missing.append(title)
 
     if not missing:
-        return await update.message.reply_text("🎯 All movies/series have a release year.")
+        return await message.reply_text("🎯 All movies/series have a release year.")
 
     missing_sorted = sorted(missing)
 
@@ -536,7 +538,7 @@ async def show_missing_year_page(update: Update, context: ContextTypes.DEFAULT_T
     if nav:
         keyboard.append(nav)
 
-    await update.message.reply_text(
+    await message.reply_text(
         text,
         parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup(keyboard)
