@@ -612,18 +612,18 @@ async def fixposter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def show_missing_page(update, context):
+async def show_missing_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     movies = get_movies()
+
     missing = []
-for t, d in movies.items():
-    meta = d.get("meta", {})
-    if not meta.get("poster"):
-        missing.append(t)
+    for t, d in movies.items():
+        meta = d.get("meta", {})
+        if not meta.get("poster"):
+            missing.append(t)
 
     if not missing:
-        return await 
-    update.message.reply_text("🎉 All movies have posters!")
+        return await update.message.reply_text("🎉 All movies have posters!")
 
     offset = missing_posters_offset.get(user_id, 0)
     end = offset + POSTERS_PER_PAGE
@@ -636,9 +636,9 @@ for t, d in movies.items():
 
     nav = []
     if offset > 0:
-        nav.append(InlineKeyboardButton("⬅ Prev", callback_data=f"missing_prev"))
+        nav.append(InlineKeyboardButton("⬅ Prev", callback_data="missing_prev"))
     if end < len(missing):
-        nav.append(InlineKeyboardButton("➡ Next", callback_data=f"missing_next"))
+        nav.append(InlineKeyboardButton("➡ Next", callback_data="missing_next"))
     if nav:
         keyboard.append(nav)
 
