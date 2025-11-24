@@ -655,7 +655,7 @@ async def show_missing_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
             missing.append(t)
 
     if not missing:
-        return await message.reply_text("🎉 All movies have posters!")
+        return await update.message.reply_text("🎉 All movies have posters!")
 
     offset = missing_posters_offset.get(user_id, 0)
     end = offset + POSTERS_PER_PAGE
@@ -674,7 +674,7 @@ async def show_missing_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if nav:
         keyboard.append(nav)
 
-    await update.message.reply_text(
+    await message.reply_text(
         f"📌 Missing Posters {offset+1}-{min(end,len(missing))} of {len(missing)}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
