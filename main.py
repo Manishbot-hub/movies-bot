@@ -493,7 +493,7 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     missing = []
     for title, data in movies.items():
         meta = (data or {}).get("meta") or {}
-        if not meta.get("year"):
+        if "meta" not in data or not meta.get("year"):
             missing.append(title)
 
     if not missing:
@@ -615,7 +615,11 @@ async def fixposter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_missing_page(update, context):
     user_id = update.effective_user.id
     movies = get_movies()
-    missing = [t for t, d in movies.items() if "poster" not in d]
+    missing = []
+for t, d in movies.items():
+    meta = d.get("meta", {})
+    if not meta.get("poster"):
+        missing.append(t)
 
     if not missing:
         return await update.message.reply_text("🎉 All movies have posters!")
@@ -1132,13 +1136,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = query.from_user.id
         missing_posters_offset[uid] += POSTERS_PER_PAGE
         await query.message.delete()
-        await show_missing_page(query, context)
+        await show_missing_page(update.callback_query, context)
 
     elif query.data == "missing_prev":
         uid = query.from_user.id
         missing_posters_offset[uid] = max(0, missing_posters_offset[uid] - POSTERS_PER_PAGE)
         await query.message.delete()
-        await show_missing_page(query, context)
+        await show_missing_page(update.callback_query, context)
     
     elif query.data.startswith("more|"):
         _, new_offset = query.data.split("|", 1)
