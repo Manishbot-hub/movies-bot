@@ -487,39 +487,36 @@ async def scan_posters(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin only: show titles where meta.year is missing."""
     if update.effective_user.id != ADMIN_ID:
-        return
+        return await update.message.reply_text("⛔ Not authorized.")
 
     movies = db.reference("movies").get() or {}
     missing = []
+
     for title, data in movies.items():
         meta = (data or {}).get("meta") or {}
         if "meta" not in data or not meta.get("year"):
             missing.append(title)
 
     if not missing:
-        await update.message.reply_text("✅ Every movie/series has a year in meta.")
-        return
+        return await update.message.reply_text("🎯 All movies/series have a release year.")
 
-    # limit to avoid Telegram flood
+    # Sort & limit (avoid Telegram flood)
     missing_sorted = sorted(missing)
     shown = missing_sorted[:80]
 
-    
-    escaped = [
-    f"• {escape_markdown(t.replace('_', ' '), version=2)}"
-    for t in shown
+    # Escape movie titles + remove underscores for display
+    escaped_lines = [
+        f"• {escape_markdown(t.replace('_', ' '), version=2)}"
+        for t in shown
     ]
 
-    reply = (
-    "🎬 *Movies/Series without year in meta:*\n\n"
-    + "\n".join(escaped)
-    )
+    reply = "🎬 *Movies/Series Missing Release Year:*\n\n" + "\n".join(escaped_lines)
 
     if len(missing_sorted) > len(shown):
-        reply += f"\n\n…{len(missing_sorted) - len(shown)} more."
+        more_count = len(missing_sorted) - len(shown)
+        reply += f"\n\n…{more_count} more not shown."
 
     await update.message.reply_text(reply, parse_mode="MarkdownV2")
-
 
 async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
