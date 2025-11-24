@@ -485,7 +485,6 @@ async def scan_posters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Poster scan finished. Updated {updated} titles.")
 
 async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin only: show titles where meta.year is missing."""
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
@@ -506,17 +505,21 @@ async def list_missing_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     escaped_lines = []
     
     for t in shown:
-        txt = t.replace("_", " ")  # Replace underscores
-        txt = escape_markdown(txt, version=2)  # Escape special chars
-        escaped_lines.append(f"• {txt}")
+        clean = t.replace("_", " ")
+        clean = escape_markdown(clean, version=2)
+        escaped_lines.append(f"• {clean}")
 
-    reply = "🎬 *Movies/Series Missing Release Year:*\n\n" + "\n".join(escaped_lines)
+    text = "🎬 *Movies and Series Missing Release Year:*\n\n" + "\n".join(escaped_lines)
 
     if len(missing_sorted) > len(shown):
         more_count = len(missing_sorted) - len(shown)
-        reply += f"\n\n…{more_count} more not shown."
+        more_text = f"\n\n…{escape_markdown(str(more_count), version=2)} more not shown"
+        text += more_text
 
-    await update.message.reply_text(reply, parse_mode="MarkdownV2")
+    # Escape *inside text*
+    text = text.replace(".", "\\.")
+
+    await update.message.reply_text(text, parse_mode="MarkdownV2")
 
 async def remove_all_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
