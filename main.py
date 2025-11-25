@@ -1043,13 +1043,24 @@ async def show_movie_page(user_id, context, send_func):
     end = offset + MOVIES_PER_PAGE
     current_page = movies[offset:end]
 
-    keyboard = [
-    [InlineKeyboardButton(
-        title.replace("_", " "),
-        callback_data=f"movie|{clean_firebase_key(title)}"
-    )]
-    for title in current_page
-    ]
+    keyboard = []
+
+    for title in current_page:
+    # Create safe callback key
+    safe = clean_firebase_key(title)
+
+    # Remove unsafe characters
+    safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)
+
+    # Limit to 50 chars so Telegram never rejects
+    safe = safe[:50]
+
+    keyboard.append([
+        InlineKeyboardButton(
+            title.replace("_", " "),
+            callback_data=f"movie|{safe}"
+        )
+    ])
 
     nav_buttons = []
     if offset > 0:
