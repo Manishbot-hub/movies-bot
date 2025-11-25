@@ -971,16 +971,14 @@ async def ensure_poster_for_movie(key: str, force: bool = False):
         except Exception:
             continue
 
-
-
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "edit_title_old" in context.user_data:
-        return  # ⛔ User is editing a title, don't trigger search
+        return  # user editing title, skip search
 
     user_id = update.effective_user.id
     await delete_last(user_id, context)
 
-    # Get the search query from text or command
+    # Get text
     if update.message:
         query = update.message.text.strip().lower()
     else:
@@ -994,40 +992,45 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movies = get_movies()
     normalized = {title: title.replace("_", " ").lower() for title in movies}
 
-    # First try substring matching
+    # substring match
     substring_matches = [
         key for key, name in normalized.items() if query in name
     ]
 
-    # If no substring match, try fuzzy match
-    fuzzy_matches = []
-    if not substring_matches:
-        all_titles = list(normalized.values())
-        close_titles = difflib.get_close_matches(query, all_titles, n=10, cutoff=0.5)
-        fuzzy_matches = [
-            key for key, name in normalized.items() if name in close_titles
-        ]
-
-    final_matches = substring_matches or fuzzy_matches
+    # fuzzy match if needed
+    if substring_matches:
+        final_matches = substring_matches
+    else:
+        close = difflib.get_close_matches(query, normalized.values(), n=10, cutoff=0.5)
+        final_matches = [k for k, v in normalized.items() if v in close]
 
     if not final_matches:
         msg = await update.message.reply_text("❌ No matching movies found.")
         user_last_bot_message[user_id] = msg.message_id
         return
 
-    keyboard = [
-    [InlineKeyboardButton(
-        title.replace("_", " "),
-        callback_data=f"movie|{clean_firebase_key(title)}"
-    )]
-    for title in current_page
-    ]
+    # SAFE callback data (fixes long title issue)
+    keyboard = []
+    for title in final_matches[:10]:
+        safe = clean_firebase_key(title)
+        safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)  # keep Telegram-safe characters only
+        safe = safe[:50]  # avoid Telegram 64-byte limit
+
+        keyboard.append([
+            InlineKeyboardButton(
+                title.replace("_", " "),
+                callback_data=f"movie|{safe}"
+            )
+        ])
 
     msg = await update.message.reply_text(
         f"🔍 Found {len(final_matches)} matching movie(s):",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
     user_last_bot_message[user_id] = msg.message_id
+
+
 async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await delete_last(user_id, context)
