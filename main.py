@@ -134,7 +134,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.warning(f"❌ Failed to save user: {e}")
 
-    text = "\U0001F44B Welcome to Movies World! Use /search to get your favourite movies🎦🎦, Type any movie name,/movies to browse and /requestmovie to request a movie"
+    text = "\U0001F44B Welcome to Movies World! Type any movie name to get your favourite movies🎦,/movies to browse and /requestmovie to request a movie"
     msg = await update.message.reply_text(text)
     user_last_bot_message[user.id] = msg.message_id
 
@@ -1053,12 +1053,31 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await delete_last(query.from_user.id, context)
 
-    _, title = query.data.split("|", 1)
-    movie = get_movies().get(title)
+    _, raw_title = query.data.split("|", 1)
+
+    movies = get_movies()
+
+    # 1) Direct lookup (most cases)
+    movie = movies.get(raw_title)
+
+    # 2) If not found → try cleaned key
     if not movie:
-        msg = await query.message.reply_text("❌ Movie not found.")
-        user_last_bot_message[query.from_user.id] = msg.message_id
-        return
+        safe_key = clean_firebase_key(raw_title)
+        movie = movies.get(safe_key)
+
+    # 3) If still not found → try reverse-match Firebase keys
+    if not movie:
+        for k, v in movies.items():
+            if clean_firebase_key(k) == safe_key:
+                movie = v
+                raw_title = k
+                break
+
+# 4) If still not found → error
+if not movie:
+    msg = await query.message.reply_text("❌ Movie not found.")
+    user_last_bot_message[query.from_user.id] = msg.message_id
+    return
 
     # Ensure poster exists (fetch if missing)
     await ensure_poster_for_movie(title, force=False)
