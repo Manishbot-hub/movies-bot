@@ -61,16 +61,15 @@ def clean_firebase_key(key: str) -> str:
     return re.sub(r'[.#$/\[\]]', '_', key)
 
 
-
 def _shorten_url_sync(link: str) -> str:
-    """Synchronously call Earn4Link to shorten a link."""
-    API_KEY = os.getenv("EARN4LINK_API")
+    """Synchronously call ShrinkMe.io to shorten a link."""
+    API_KEY = os.getenv("SHRINKME_API")  # <-- NEW env var name
     if not API_KEY:
-        logging.error("❌ EARN4LINK_API missing in Railway variables!")
+        logging.error("❌ SHRINKME_API missing in Railway variables!")
         return link  # fallback if no API key found
 
-    url = f"https://earn4link.in/api?api={API_KEY}&url={link}"
-    logging.info(f"Shortener called: {url}")
+    url = f"https://shrinkme.io/api?api={API_KEY}&url={link}"
+    logging.info(f"ShrinkMe shortener called: {url}")
 
     try:
         resp = requests.get(url, timeout=10)
@@ -78,22 +77,22 @@ def _shorten_url_sync(link: str) -> str:
 
         try:
             data = resp.json()
-            logging.info(f"Shortener response: {data}")
+            logging.info(f"ShrinkMe response: {data}")
 
-            # Earn4link success response example:
-            # {"status":"success","shortenedUrl":"https://earn4link.in/abcd123"}
+            # ShrinkMe success response example:
+            # {"status":"success","shortenedUrl":"https://shrinkme.io/xxxxx"}
 
             if data.get("status") == "success" and data.get("shortenedUrl"):
                 return data["shortenedUrl"]
 
         except json.JSONDecodeError:
-            logging.warning(f"Invalid JSON from Earn4Link: {resp.text}")
+            logging.warning(f"Invalid JSON from ShrinkMe.io: {resp.text}")
 
     except Exception as e:
-        logging.error(f"Earn4Link shortener request failed: {e}")
+        logging.error(f"ShrinkMe.io shortener request failed: {e}")
 
     return link  # fallback (send long link)
-    
+
 
 async def shorten_link(link: str) -> str:
     """Async wrapper: runs the sync function in a thread."""
