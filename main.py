@@ -1037,7 +1037,13 @@ async def show_movie_page(user_id, context, send_func):
     end = offset + MOVIES_PER_PAGE
     current_page = movies[offset:end]
 
-    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{clean_firebase_key(title)}" for title in current_page]
+    keyboard = [
+    InlineKeyboardButton(
+        title.replace("_", " "),
+        callback_data=f"movie|{clean_firebase_key(title)}"
+    )
+    for title in current_page
+    ]
 
     nav_buttons = []
     if offset > 0:
