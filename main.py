@@ -1080,7 +1080,7 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Ensure poster exists (fetch if missing)
-    await ensure_poster_for_movie(title, force=False)
+    await ensure_poster_for_movie(raw_title, force=False)
 
     meta = movie.get("meta", {})
     poster = meta.get("poster")
