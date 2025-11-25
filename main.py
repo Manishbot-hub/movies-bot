@@ -1086,7 +1086,7 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     poster = meta.get("poster")
     year = meta.get("year")
 
-    caption = f"*{title.replace('_', ' ')}*"
+    caption = f"*{raw_title.replace('_', ' ')}*"
     if year:
         caption += f" ({year})"
     caption += "\n\nSelect quality 👇"
