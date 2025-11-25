@@ -1016,8 +1016,11 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = [
-        [InlineKeyboardButton(key.replace("_", " "), callback_data=f"movie|{clean_firebase_key(key)}")]
-        for key in final_matches
+    [InlineKeyboardButton(
+        title.replace("_", " "),
+        callback_data=f"movie|{clean_firebase_key(title)}"
+    )]
+    for title in current_page
     ]
 
     msg = await update.message.reply_text(
@@ -1038,7 +1041,12 @@ async def show_movie_page(user_id, context, send_func):
     current_page = movies[offset:end]
 
     keyboard = [
-    InlineKeyboardButton(title.replace("_", " "),callback_data=f"movie|{clean_firebase_key(title)}")for title in current_page]
+    [InlineKeyboardButton(
+        title.replace("_", " "),
+        callback_data=f"movie|{clean_firebase_key(title)}"
+    )]
+    for title in current_page
+    ]
 
     nav_buttons = []
     if offset > 0:
