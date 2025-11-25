@@ -1011,10 +1011,6 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # SAFE callback data (fixes long title issue)
     keyboard = []
-    for title in final_matches[:10]:
-        safe = clean_firebase_key(title)
-        safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)  # keep Telegram-safe characters only
-        safe = safe[:50]  # avoid Telegram 64-byte limit
 
         keyboard.append([
             InlineKeyboardButton(
@@ -1046,19 +1042,10 @@ async def show_movie_page(user_id, context, send_func):
     keyboard = []
 
     for title in current_page:
-        # Create safe callback key
-        safe = clean_firebase_key(title)
-
-        # Remove unsafe characters
-        safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)
-
-        # Limit to 50 chars so Telegram never rejects
-        safe = safe[:50]
-
         keyboard.append([
             InlineKeyboardButton(
                 title.replace("_", " "),
-                callback_data=f"movie|{safe}"
+                callback_data=f"movie|{title}"
             )
         ])
 
