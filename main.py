@@ -276,7 +276,15 @@ async def request_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie_requests[user_id] = now
     context.user_data["awaiting_movie_request"] = True
 
-    await update.message.reply_text("🎬 Please type the name of the movie you want to request:")        
+    await update.message.reply_text("🎬 Please type the name of the movie you want to request:")    
+
+def clean_firebase_key(name: str):
+    name = name.strip()
+    name = name.replace("’", "'")
+    name = name.replace("“", '"').replace("”", '"')
+    name = name.replace("…", "...")
+    name = " ".join(name.split())  # remove extra spaces
+    return name
 
 
 
@@ -1008,7 +1016,7 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = [
-        [InlineKeyboardButton(key.replace("_", " "), callback_data=safe_callback_data("movie", key))]
+        [InlineKeyboardButton(key.replace("_", " "), callback_data=f"movie|{clean_firebase_key(key)}")]
         for key in final_matches
     ]
 
@@ -1029,7 +1037,7 @@ async def show_movie_page(user_id, context, send_func):
     end = offset + MOVIES_PER_PAGE
     current_page = movies[offset:end]
 
-    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=safe_callback_data("movie", title))] for title in current_page]
+    keyboard = [[InlineKeyboardButton(title.replace("_", " "), callback_data=f"movie|{clean_firebase_key(title)}" for title in current_page]
 
     nav_buttons = []
     if offset > 0:
