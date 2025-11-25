@@ -1097,7 +1097,7 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if q != "meta"
     ]
     buttons.append([
-        InlineKeyboardButton("⚠️ Report Broken Link", callback_data=safe_callback_data("report", title))
+        InlineKeyboardButton("⚠️ Report Broken Link", callback_data=safe_callback_data("report", raw_title))
     ])
     markup = InlineKeyboardMarkup(buttons)
 
