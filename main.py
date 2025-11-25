@@ -1073,11 +1073,11 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 raw_title = k
                 break
 
-# 4) If still not found → error
-if not movie:
-    msg = await query.message.reply_text("❌ Movie not found.")
-    user_last_bot_message[query.from_user.id] = msg.message_id
-    return
+    # 4) If still not found → error
+    if not movie:
+        msg = await query.message.reply_text("❌ Movie not found.")
+        user_last_bot_message[query.from_user.id] = msg.message_id
+        return
 
     # Ensure poster exists (fetch if missing)
     await ensure_poster_for_movie(title, force=False)
