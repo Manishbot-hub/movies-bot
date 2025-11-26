@@ -1042,25 +1042,49 @@ async def show_movie_page(user_id, context, send_func):
     keyboard = []
 
     for title in current_page:
+        # Clean Firebase key
         safe = clean_firebase_key(title)
+
+        # Remove unsafe characters
         safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)
+
+        # Limit to 50 chars (Telegram safe)
         safe = safe[:50]
 
-        keyboard.append([InlineKeyboardButton(title.replace("_", " "),callback_data=f"movie|{safe}")])
+        # Add movie button
+        keyboard.append([
+            InlineKeyboardButton(
+                title.replace("_", " "),
+                callback_data=f"movie|{safe}"
+            )
+        ])
 
+    # Navigation buttons
     nav_buttons = []
     if offset > 0:
-        nav_buttons.append(InlineKeyboardButton("◀ Back", callback_data=safe_callback_data("back", str(offset - MOVIES_PER_PAGE))))
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "◀ Back",
+                callback_data=safe_callback_data("back", str(offset - MOVIES_PER_PAGE))
+            )
+        )
     if end < len(movies):
-        nav_buttons.append(InlineKeyboardButton("▶ Show More", callback_data=safe_callback_data("more", str(end))))
+        nav_buttons.append(
+            InlineKeyboardButton(
+                "▶ Show More",
+                callback_data=safe_callback_data("more", str(end))
+            )
+        )
 
     if nav_buttons:
         keyboard.append(nav_buttons)
 
+    # Send message with reply markup
     msg = await send_func(
         f"🎬 Showing movies {offset + 1} to {min(end, len(movies))} of {len(movies)}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
     user_last_bot_message[user_id] = msg.message_id
 
 
