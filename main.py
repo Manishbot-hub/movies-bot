@@ -1009,8 +1009,13 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_last_bot_message[user_id] = msg.message_id
         return
 
-    # SAFE callback data (fixes long title issue)
+    # Build keyboard
     keyboard = []
+
+    for title in final_matches:
+        safe = clean_firebase_key(title)
+        safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)
+        safe = safe[:50]
 
         keyboard.append([
             InlineKeyboardButton(
@@ -1025,7 +1030,6 @@ async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     user_last_bot_message[user_id] = msg.message_id
-
 
 async def list_movies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
