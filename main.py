@@ -1042,10 +1042,14 @@ async def show_movie_page(user_id, context, send_func):
     keyboard = []
 
     for title in current_page:
+        safe = clean_firebase_key(title)
+        safe = re.sub(r'[^a-zA-Z0-9_\-]', '', safe)
+        safe = safe[:50]
+
         keyboard.append([
             InlineKeyboardButton(
                 title.replace("_", " "),
-                callback_data=f"movie|{title}"
+                callback_data=f"movie|{safe}"
             )
         ])
 
