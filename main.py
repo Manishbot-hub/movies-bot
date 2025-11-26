@@ -1086,56 +1086,68 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await delete_last(query.from_user.id, context)
 
-    _, raw_title = query.data.split("|", 1)
+    # safe key from callback
+    _, safe = query.data.split("|", 1)
 
     movies = get_movies()
 
-    # 1) Direct lookup (most cases)
-    movie = movies.get(raw_title)
+    movie = None
+    real_title = None
 
-    # 2) If not found → try cleaned key
-    if not movie:
-        safe_key = clean_firebase_key(raw_title)
-        movie = movies.get(safe_key)
+    # 1) direct match (if Firebase key was already safe)
+    if safe in movies:
+        movie = movies[safe]
+        real_title = safe
 
-    # 3) If still not found → try reverse-match Firebase keys
+    # 2) match by cleaning Firebase titles the SAME way
     if not movie:
-        for k, v in movies.items():
-            if clean_firebase_key(k) == safe_key:
-                movie = v
-                raw_title = k
+        for title, data in movies.items():
+            cleaned = clean_firebase_key(title)
+            cleaned = re.sub(r"[^a-zA-Z0-9_\-]", "", cleaned)
+            cleaned = cleaned[:50]
+
+            if cleaned == safe:
+                movie = data
+                real_title = title
                 break
 
-    # 4) If still not found → error
+    # 3) still not found
     if not movie:
         msg = await query.message.reply_text("❌ Movie not found.")
         user_last_bot_message[query.from_user.id] = msg.message_id
         return
 
-    # Ensure poster exists (fetch if missing)
-    await ensure_poster_for_movie(raw_title, force=False)
+    # Fetch poster if missing
+    await ensure_poster_for_movie(real_title, force=False)
 
     meta = movie.get("meta", {})
     poster = meta.get("poster")
     year = meta.get("year")
 
-    caption = f"*{raw_title.replace('_', ' ')}*"
+    caption = f"*{real_title}*"
     if year:
         caption += f" ({year})"
     caption += "\n\nSelect quality 👇"
 
+    # Quality buttons
     buttons = [
         [InlineKeyboardButton(f"{q} 🔗", url=l)]
         for q, l in movie.items()
         if q != "meta"
     ]
+
+    # Report button
     buttons.append([
-        InlineKeyboardButton("⚠️ Report Broken Link", callback_data=safe_callback_data("report", raw_title))
+        InlineKeyboardButton(
+            "⚠️ Report Broken Link",
+            callback_data=safe_callback_data("report", real_title)
+        )
     ])
+
     markup = InlineKeyboardMarkup(buttons)
 
+    # Send poster if exists
     if poster:
-        # Send poster with buttons
         msg = await query.message.reply_photo(
             photo=poster,
             caption=caption,
@@ -1143,7 +1155,6 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=markup
         )
     else:
-        # Fallback if poster missing
         msg = await query.message.reply_text(
             caption,
             parse_mode="Markdown",
@@ -1153,11 +1164,10 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_last_bot_message[query.from_user.id] = msg.message_id
 
 
-
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
-        await update.message.reply_text("\u26D4 Not authorized.")
+        await update.message.reply_text("\u26D4 Notauthorized.")
         return
 
     args = context.args
