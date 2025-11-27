@@ -1364,7 +1364,7 @@ telegram_app.add_handler(CommandHandler("addmovie", add_movie))
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
 telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
 telegram_app.add_handler(CommandHandler("request", view_requests))
-application.add_handler(CommandHandler("getpdf", getpdf))
+telegram_app.add_handler(CommandHandler("getpdf", getpdf))
 telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
