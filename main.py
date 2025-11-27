@@ -1207,26 +1207,42 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_last_bot_message[query.from_user.id] = msg.message_id
 
+
 async def getpdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    msg = await update.message.reply_text("⏳ Generating PDF… Please wait…")
+    # Determine message source (message OR callback)
+    if update.message:
+        msg_obj = update.message
+    else:
+        msg_obj = update.callback_query.message
+        await update.callback_query.answer()
+
+    # Send wait message
+    loading = await msg_obj.reply_text("⏳ Generating PDF… Please wait…")
 
     movies = get_movies()
     if not movies:
-        await msg.edit_text("❌ No movies found in database.")
+        await loading.edit_text("❌ No movies found in database.")
         return
 
     pdf_path = "/app/movies_list.pdf"
     create_movies_pdf(movies, pdf_path)
 
-    await update.message.reply_document(
+    # Send PDF
+    await msg_obj.reply_document(
         document=open(pdf_path, "rb"),
         filename="movies_list.pdf",
         caption="📄 Your full movie poster catalog"
     )
 
-    await msg.delete()
+    # Delete loading message
+    try:
+        await loading.delete()
+    except:
+        pass
+
+    return   # 🔥 IMPORTANT: prevents infinite re-trigger
 
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
