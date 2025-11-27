@@ -8,6 +8,11 @@ import json
 import asyncio
 import logging
 import firebase_admin
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+import requests
+from io import BytesIO
 from telegram.helpers import escape_markdown
 from datetime import datetime
 from firebase_admin import credentials, db
@@ -849,6 +854,45 @@ def _fetch_tmdb_meta_sync(title: str, year: str | None) -> dict | None:
         logging.warning(f"TMDB fetch failed for '{title}' ({year}): {e}")
         return None
 
+def create_movies_pdf(movies: dict, output_file: str):
+    c = canvas.Canvas(output_file, pagesize=A4)
+    width, height = A4
+
+    for title, data in movies.items():
+        meta = data.get("meta", {})
+        poster_url = meta.get("poster")
+
+        # Title
+        c.setFont("Helvetica-Bold", 18)
+        c.drawString(40, height - 50, title)
+
+        # Poster
+        if poster_url:
+            try:
+                img_data = requests.get(poster_url).content
+                img = ImageReader(BytesIO(img_data))
+
+                img_width = width - 80
+                img_height = img_width * 1.5
+
+                c.drawImage(
+                    img,
+                    40,
+                    height - 80 - img_height,
+                    width=img_width,
+                    height=img_height,
+                    preserveAspectRatio=True,
+                )
+            except:
+                c.setFont("Helvetica", 12)
+                c.drawString(40, height - 100, "⚠️ Poster failed to load")
+        else:
+            c.drawString(40, height - 100, "❌ No poster available")
+
+        c.showPage()
+
+    c.save()
+
 
 async def fetch_tmdb_meta_for_title(title: str):
     # Clean before TMDB search
@@ -1163,6 +1207,27 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_last_bot_message[query.from_user.id] = msg.message_id
 
+async def getpdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    msg = await update.message.reply_text("⏳ Generating PDF… Please wait…")
+
+    movies = get_movies()
+    if not movies:
+        await msg.edit_text("❌ No movies found in database.")
+        return
+
+    pdf_path = "/app/movies_list.pdf"
+    create_movies_pdf(movies, pdf_path)
+
+    await update.message.reply_document(
+        document=open(pdf_path, "rb"),
+        filename="movies_list.pdf",
+        caption="📄 Your full movie poster catalog"
+    )
+
+    await msg.delete()
+
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1299,6 +1364,7 @@ telegram_app.add_handler(CommandHandler("addmovie", add_movie))
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
 telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
 telegram_app.add_handler(CommandHandler("request", view_requests))
+application.add_handler(CommandHandler("getpdf", getpdf))
 telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
