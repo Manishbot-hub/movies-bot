@@ -861,51 +861,23 @@ def _fetch_tmdb_meta_sync(title: str, year: str | None) -> dict | None:
         return None
 
 
-def download_and_compress_image(url):
-    try:
-        r = requests.get(url, timeout=15)
-        if r.status_code != 200:
-            return None
-        
-        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-        temp.write(r.content)
-        temp.close()
 
-        img = Image.open(temp.name).convert("RGB")
-        compressed_path = temp.name.replace(".jpg", "_c.jpg")
-        img.save(compressed_path, "JPEG", quality=70)
-
-        os.remove(temp.name)
-        return compressed_path
-
-    except:
-        return None
-
-
-def create_movies_pdf_chunks(movies):
-    MAX_SIZE = 40 * 1024 * 1024  # 40 MB
-    chunks = []
-
+def create_movies_pdf_range(movies_slice, output_file):
+    c = canvas.Canvas(output_file, pagesize=A4)
     width, height = A4
 
-    def new_canvas():
-        fp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        c = canvas.Canvas(fp.name, pagesize=A4)
-        return fp.name, c
+    for title, data in movies_slice:
+        meta = data.get("meta", {})
+        poster_url = meta.get("poster")
 
-    current_file, c = new_canvas()
-
-    for title, data in movies.items():
-        poster_url = data.get("meta", {}).get("poster")
-
-        # --- Add Title ---
+        # Title
         c.setFont("Helvetica-Bold", 18)
         c.drawString(40, height - 50, title)
 
-        # --- Add Poster ---
+        # Poster
         if poster_url:
             try:
-                img_data = requests.get(poster_url, timeout=20).content
+                img_data = requests.get(poster_url, timeout=15).content
                 img = ImageReader(BytesIO(img_data))
 
                 img_width = width - 80
@@ -927,19 +899,10 @@ def create_movies_pdf_chunks(movies):
 
         c.showPage()
 
-        # --- CHECK SIZE SAFELY ---
-        c.save()
-
-        if os.path.getsize(current_file) > MAX_SIZE:
-            # close final chunk and start a new one
-            chunks.append(current_file)
-            current_file, c = new_canvas()
-
-    # save last PDF
     c.save()
-    chunks.append(current_file)
 
-    return chunks
+
+
 
 
 
@@ -1291,28 +1254,65 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_last_bot_message[query.from_user.id] = msg.message_id
 
 
+
 async def getpdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("⏳ Generating PDFs… Please wait…")
+    user = update.effective_user
 
-    movies = get_movies()
-    if not movies:
-        await msg.edit_text("❌ No movies found.")
-        return
-
-    pdf_chunks = create_movies_pdf_chunks(movies)
-
-    await msg.edit_text(f"📄 Generated {len(pdf_chunks)} file(s). Uploading...")
-
-    for i, pdf in enumerate(pdf_chunks, 1):
-        await update.message.reply_document(
-            document=open(pdf, "rb"),
-            filename=f"movies_part_{i}.pdf",
-            caption=f"📄 Movies (Part {i})"
+    # Must pass range like: /getpdf 1-100
+    if not context.args:
+        return await update.message.reply_text(
+            "⚠️ Please specify range.\nExample: `/getpdf 1-100`",
+            parse_mode="Markdown"
         )
-        os.remove(pdf)
 
-    await msg.delete()
+    # Parse range
+    try:
+        rng = context.args[0]
+        start_str, end_str = rng.split("-")
+        start = int(start_str)
+        end = int(end_str)
+    except:
+        return await update.message.reply_text(
+            "❌ Invalid format.\nUse: `/getpdf 1-100`",
+            parse_mode="Markdown"
+        )
 
+    # Load movies (Firebase order)
+    movies = list(get_movies().items())
+    total = len(movies)
+
+    # Validate range
+    if start < 1 or end > total or start > end:
+        return await update.message.reply_text(
+            f"❌ Invalid range.\nThere are only *{total}* movies.",
+            parse_mode="Markdown"
+        )
+
+    # Slice movies
+    movie_slice = movies[start-1 : end]
+
+    # Notify user
+    loading = await update.message.reply_text(
+        f"⏳ Creating PDF for movies {start}-{end}..."
+    )
+
+    # Create PDF file
+    pdf_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+    create_movies_pdf_range(movie_slice, pdf_path)
+
+    # Send PDF
+    await update.message.reply_document(
+        document=open(pdf_path, "rb"),
+        filename=f"movies_{start}-{end}.pdf",
+        caption=f"📄 Movies {start}-{end}"
+    )
+
+    os.remove(pdf_path)
+
+    try:
+        await loading.delete()
+    except:
+        pass
 
 
 
