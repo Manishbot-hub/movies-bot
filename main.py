@@ -11,6 +11,8 @@ import firebase_admin
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Image, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 import requests
 import tempfile
 from PIL import Image
@@ -881,51 +883,56 @@ def download_and_compress_image(url):
 def create_pdf_chunks(movies):
     MAX_SIZE_MB = 40
     chunks = []
-    current_canvas = None
-    current_pdf_path = None
 
-    def new_pdf():
+    styles = getSampleStyleSheet()
+    story = []
+    current_size = 0
+
+    def save_pdf(story):
         fp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        c = canvas.Canvas(fp.name, pagesize=A4)
-        return fp.name, c
-
-    # Start first PDF
-    current_pdf_path, current_canvas = new_pdf()
+        doc = SimpleDocTemplate(fp.name, pagesize=A4)
+        doc.build(story)
+        return fp.name
 
     for title, data in movies.items():
         poster = data.get("meta", {}).get("poster")
-        compressed = download_and_compress_image(poster) if poster else None
 
-        # Draw Title
-        current_canvas.setFont("Helvetica-Bold", 16)
-        current_canvas.drawString(50, 800, title)
+        # Add Title
+        story.append(Paragraph(f"<b>{title}</b>", styles['Title']))
+        story.append(Spacer(1, 20))
 
-        # Draw Poster
-        if compressed:
-            current_canvas.drawImage(ImageReader(compressed),
-                                    50, 450, width=300, height=300)
+        # Add Poster Image
+        if poster:
+            try:
+                response = requests.get(poster, timeout=20)
+                img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg").name
+                with open(img_path, "wb") as f:
+                    f.write(response.content)
 
-        current_canvas.showPage()
+                story.append(Image(img_path, width=300, height=300))
+                story.append(Spacer(1, 20))
 
-        # CHECK SIZE BEFORE SAVING
-        current_canvas.save()
+                current_size += len(response.content)
 
-        if os.path.getsize(current_pdf_path) > MAX_SIZE_MB * 1024 * 1024:
-            # CLOSE & STORE FULL PDF
-            chunks.append(current_pdf_path)
+                # If chunk reaches 40MB → save & reset
+                if current_size > MAX_SIZE_MB * 1024 * 1024:
+                    pdf_file = save_pdf(story)
+                    chunks.append(pdf_file)
 
-            # START NEW PDF
-            current_pdf_path, current_canvas = new_pdf()
+                    story = []
+                    current_size = 0
+            except:
+                pass
 
-        # CLEAN TEMP
-        if compressed:
-            os.remove(compressed)
+        story.append(Spacer(1, 40))
 
-    # FINAL SAVE (ONLY ONCE)
-    current_canvas.save()
-    chunks.append(current_pdf_path)
+    # Save last chunk
+    if story:
+        pdf_file = save_pdf(story)
+        chunks.append(pdf_file)
 
     return chunks
+
 
 
 async def fetch_tmdb_meta_for_title(title: str):
