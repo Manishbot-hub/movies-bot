@@ -8,6 +8,8 @@ import json
 import asyncio
 import logging
 import firebase_admin
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
@@ -895,38 +897,49 @@ def create_pdf_chunks(movies):
         return fp.name
 
     for title, data in movies.items():
-        poster = data.get("meta", {}).get("poster")
+        poster_url = data.get("meta", {}).get("poster")
 
         # Add Title
         story.append(Paragraph(f"<b>{title}</b>", styles['Title']))
-        story.append(Spacer(1, 20))
+        story.append(Spacer(1, 12))
 
-        # Add Poster Image
-        if poster:
+        # Download and Add Image
+        if poster_url:
             try:
-                response = requests.get(poster, timeout=20)
+                # FIX 1: Railway SSL issue → disable verification
+                response = requests.get(poster_url, timeout=20, verify=False)
+
+                # Save image to temporary file
                 img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg").name
                 with open(img_path, "wb") as f:
                     f.write(response.content)
-
-                story.append(Image(img_path, width=300, height=300))
+                
+                # FIX 2: Resize image to fit A4 page
+                img = Image(img_path)
+                img._restrictSize(400, 500)  # auto resize image to fit the page
+                
+                # Add image to the PDF
+                story.append(img)
                 story.append(Spacer(1, 20))
 
                 current_size += len(response.content)
 
-                # If chunk reaches 40MB → save & reset
+                # FIX 3: split into chunks
                 if current_size > MAX_SIZE_MB * 1024 * 1024:
                     pdf_file = save_pdf(story)
                     chunks.append(pdf_file)
 
-                    story = []
-                    current_size = 0
-            except:
-                pass
+                    story = []     # reset story
+                    current_size = 0  # reset size
+
+            except Exception as e:
+                # Add note if image failed
+                story.append(Paragraph(f"<i>Poster unavailable</i>", styles['Normal']))
+                story.append(Spacer(1, 20))
 
         story.append(Spacer(1, 40))
 
-    # Save last chunk
+    # save final PDF
     if story:
         pdf_file = save_pdf(story)
         chunks.append(pdf_file)
