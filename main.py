@@ -894,64 +894,99 @@ def create_movies_pdf(movies: dict, output_file: str):
     c.save()
 
 
+
 async def fetch_tmdb_meta_for_title(title: str):
-    # Clean before TMDB search
+    import difflib
+
     original_title = title
 
-    # Remove common junk
-    cleaned = re.sub(r'\bS\d{1,2}\b', '', title, flags=re.IGNORECASE)  # Remove S01 / S1 etc
+    # Clean before search
+    cleaned = re.sub(r'\bS\d{1,2}\b', '', title, flags=re.IGNORECASE)
     cleaned = re.sub(r'\bPart\s?\d+\b', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\b(480p|720p|1080p|2160p|WEB[- ]?DL|Bluray|Hindi|Dual Audio)\b',
                      '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
-    # Extract year if present
+    # Extract year
+    year_match = re.search(r'(19|20)\d{4}', cleaned)
     year_match = re.search(r'\((\d{4})\)$', cleaned)
-    year = year_match.group(1) if year_match else None
-    if year:
-        cleaned = cleaned.replace(f"({year})", "").strip()
+    input_year = year_match.group(1) if year_match else None
+    if input_year:
+        cleaned = cleaned.replace(f"({input_year})", "").strip()
+
+    # Detect series season (S01, S02)
+    is_series_title = bool(re.search(r"S\d{1,2}", title, re.IGNORECASE))
 
     headers = {
         "Authorization": f"Bearer {TMDB_TOKEN}",
         "Accept": "application/json",
     }
 
-    query_params = {
+    params = {
         "query": cleaned,
-        "include_adult": "false"
+        "include_adult": "false",
     }
-
-    # If year exists → use it to improve accuracy
-    if year:
-        query_params["year"] = year
+    if input_year:
+        params["year"] = input_year
 
     try:
         resp = requests.get(f"{TMDB_BASE_URL}/search/multi",
-                            headers=headers, params=query_params, timeout=10)
+                            headers=headers, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
         results = data.get("results", [])
         if not results:
-            logging.warning(f"TMDB: No results found for {original_title} after cleaning → {cleaned}")
             return None
 
-        best = results[0]
+        best_match = None
+        best_score = 0
 
-        meta = {
-            "poster": TMDB_IMAGE_BASE + best.get("poster_path") if best.get("poster_path") else None,
-            "tmdb_id": best.get("id"),
-            "tmdb_title": best.get("title") or best.get("name"),
-            "year": year or (best.get("release_date","")[:4] if best.get("release_date") else ""),
-            "is_series": (best.get("media_type") == "tv")
+        for r in results:
+            tmdb_type = r.get("media_type")
+            tmdb_title = r.get("title") or r.get("name") or ""
+            tmdb_year = (r.get("release_date") or r.get("first_air_date") or "")[:4]
+
+            # --- STRICT FILTERS ---
+
+            # Type filter
+            if is_series_title and tmdb_type != "tv":
+                continue
+            if not is_series_title and tmdb_type != "movie":
+                continue
+
+            # Year filter (if year exists)
+            if input_year and tmdb_year and tmdb_year != input_year:
+                continue
+
+            # Title similarity
+            score = difflib.SequenceMatcher(None,
+                                            cleaned.lower(),
+                                            tmdb_title.lower()).ratio() * 100
+
+            if score >= 80 and score > best_score:
+                best_score = score
+                best_match = r
+
+        if not best_match:
+            return None
+
+        poster_url = None
+        if best_match.get("poster_path"):
+            poster_url = TMDB_IMAGE_BASE + best_match["poster_path"]
+
+        return {
+            "poster": poster_url,
+            "tmdb_id": best_match.get("id"),
+            "tmdb_title": best_match.get("name") or best_match.get("title"),
+            "year": input_year or tmdb_year,
+            "is_series": best_match.get("media_type") == "tv",
         }
 
-        logging.info(f"TMDB MATCH for '{original_title}' → {meta}")
-        return meta
-
     except Exception as e:
-        logging.error(f"TMDB search failed for {title}: {e}")
+        logging.error(f"TMDB failed {title}: {e}")
         return None
+
 
 
 
