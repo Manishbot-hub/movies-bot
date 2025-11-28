@@ -881,36 +881,47 @@ def download_and_compress_image(url):
 def create_pdf_chunks(movies):
     MAX_SIZE_MB = 40
     chunks = []
-    current_pdf_path = None
     current_canvas = None
+    current_pdf_path = None
 
     def new_pdf():
         fp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         c = canvas.Canvas(fp.name, pagesize=A4)
         return fp.name, c
 
+    # Start first PDF
     current_pdf_path, current_canvas = new_pdf()
 
     for title, data in movies.items():
         poster = data.get("meta", {}).get("poster")
         compressed = download_and_compress_image(poster) if poster else None
 
+        # Draw Title
         current_canvas.setFont("Helvetica-Bold", 16)
         current_canvas.drawString(50, 800, title)
 
+        # Draw Poster
         if compressed:
-            current_canvas.drawImage(ImageReader(compressed), 50, 450, width=300, height=300)
+            current_canvas.drawImage(ImageReader(compressed),
+                                    50, 450, width=300, height=300)
 
         current_canvas.showPage()
 
+        # CHECK SIZE BEFORE SAVING
         current_canvas.save()
+
         if os.path.getsize(current_pdf_path) > MAX_SIZE_MB * 1024 * 1024:
+            # CLOSE & STORE FULL PDF
             chunks.append(current_pdf_path)
+
+            # START NEW PDF
             current_pdf_path, current_canvas = new_pdf()
 
+        # CLEAN TEMP
         if compressed:
             os.remove(compressed)
 
+    # FINAL SAVE (ONLY ONCE)
     current_canvas.save()
     chunks.append(current_pdf_path)
 
