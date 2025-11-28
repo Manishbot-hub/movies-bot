@@ -12,6 +12,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 import requests
+import tempfile
+from PIL import Image
 from io import BytesIO
 from telegram.helpers import escape_markdown
 from datetime import datetime
@@ -854,45 +856,65 @@ def _fetch_tmdb_meta_sync(title: str, year: str | None) -> dict | None:
         logging.warning(f"TMDB fetch failed for '{title}' ({year}): {e}")
         return None
 
-def create_movies_pdf(movies: dict, output_file: str):
-    c = canvas.Canvas(output_file, pagesize=A4)
-    width, height = A4
+
+def download_and_compress_image(url):
+    try:
+        r = requests.get(url, timeout=15)
+        if r.status_code != 200:
+            return None
+        
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        temp.write(r.content)
+        temp.close()
+
+        img = Image.open(temp.name).convert("RGB")
+        compressed_path = temp.name.replace(".jpg", "_c.jpg")
+        img.save(compressed_path, "JPEG", quality=70)
+
+        os.remove(temp.name)
+        return compressed_path
+
+    except:
+        return None
+
+
+def create_pdf_chunks(movies):
+    MAX_SIZE_MB = 40
+    chunks = []
+    current_pdf_path = None
+    current_canvas = None
+
+    def new_pdf():
+        fp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        c = canvas.Canvas(fp.name, pagesize=A4)
+        return fp.name, c
+
+    current_pdf_path, current_canvas = new_pdf()
 
     for title, data in movies.items():
-        meta = data.get("meta", {})
-        poster_url = meta.get("poster")
+        poster = data.get("meta", {}).get("poster")
+        compressed = download_and_compress_image(poster) if poster else None
 
-        # Title
-        c.setFont("Helvetica-Bold", 18)
-        c.drawString(40, height - 50, title)
+        current_canvas.setFont("Helvetica-Bold", 16)
+        current_canvas.drawString(50, 800, title)
 
-        # Poster
-        if poster_url:
-            try:
-                img_data = requests.get(poster_url).content
-                img = ImageReader(BytesIO(img_data))
+        if compressed:
+            current_canvas.drawImage(ImageReader(compressed), 50, 450, width=300, height=300)
 
-                img_width = width - 80
-                img_height = img_width * 1.5
+        current_canvas.showPage()
 
-                c.drawImage(
-                    img,
-                    40,
-                    height - 80 - img_height,
-                    width=img_width,
-                    height=img_height,
-                    preserveAspectRatio=True,
-                )
-            except:
-                c.setFont("Helvetica", 12)
-                c.drawString(40, height - 100, "⚠️ Poster failed to load")
-        else:
-            c.drawString(40, height - 100, "❌ No poster available")
+        current_canvas.save()
+        if os.path.getsize(current_pdf_path) > MAX_SIZE_MB * 1024 * 1024:
+            chunks.append(current_pdf_path)
+            current_pdf_path, current_canvas = new_pdf()
 
-        c.showPage()
+        if compressed:
+            os.remove(compressed)
 
-    c.save()
+    current_canvas.save()
+    chunks.append(current_pdf_path)
 
+    return chunks
 
 
 async def fetch_tmdb_meta_for_title(title: str):
@@ -1246,38 +1268,29 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def getpdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    # Determine message source (message OR callback)
-    if update.message:
-        msg_obj = update.message
-    else:
-        msg_obj = update.callback_query.message
-        await update.callback_query.answer()
-
-    # Send wait message
-    loading = await msg_obj.reply_text("⏳ Generating PDF… Please wait…")
+    msg = await update.message.reply_text("⏳ Preparing your movie catalog...")
 
     movies = get_movies()
     if not movies:
-        await loading.edit_text("❌ No movies found in database.")
+        await msg.edit_text("❌ No movies found.")
         return
 
-    pdf_path = "/app/movies_list.pdf"
-    create_movies_pdf(movies, pdf_path)
+    pdf_chunks = create_pdf_chunks(movies)
 
-    # Send PDF
-    await msg_obj.reply_document(
-        document=open(pdf_path, "rb"),
-        filename="movies_list.pdf",
-        caption="📄 Your full movie poster catalog"
-    )
+    await msg.edit_text(f"📄 Generated {len(pdf_chunks)} PDF file(s). Sending...")
 
-    # Delete loading message
-    try:
-        await loading.delete()
-    except:
-        pass
+    for i, pdf in enumerate(pdf_chunks, start=1):
+        await update.message.reply_document(
+            document=open(pdf, "rb"),
+            filename=f"movies_part_{i}.pdf",
+            caption=f"📄 Movies Catalog (Part {i})"
+        )
 
-    return   # 🔥 IMPORTANT: prevents infinite re-trigger
+        os.remove(pdf)
+
+    await msg.delete()
+
+
 
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
