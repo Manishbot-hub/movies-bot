@@ -1292,26 +1292,23 @@ async def show_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def getpdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    msg = await update.message.reply_text("⏳ Preparing your movie catalog...")
+    msg = await update.message.reply_text("⏳ Generating PDFs… Please wait…")
 
     movies = get_movies()
     if not movies:
         await msg.edit_text("❌ No movies found.")
         return
 
-    pdf_chunks = create_pdf_chunks(movies)
+    pdf_chunks = create_movies_pdf_chunks(movies)
 
-    await msg.edit_text(f"📄 Generated {len(pdf_chunks)} PDF file(s). Sending...")
+    await msg.edit_text(f"📄 Generated {len(pdf_chunks)} file(s). Uploading...")
 
-    for i, pdf in enumerate(pdf_chunks, start=1):
+    for i, pdf in enumerate(pdf_chunks, 1):
         await update.message.reply_document(
             document=open(pdf, "rb"),
             filename=f"movies_part_{i}.pdf",
-            caption=f"📄 Movies Catalog (Part {i})"
+            caption=f"📄 Movies (Part {i})"
         )
-
         os.remove(pdf)
 
     await msg.delete()
