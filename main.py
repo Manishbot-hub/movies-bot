@@ -882,67 +882,62 @@ def download_and_compress_image(url):
         return None
 
 
-def create_pdf_chunks(movies):
-    MAX_SIZE_MB = 40
+def create_movies_pdf_chunks(movies):
+    MAX_SIZE = 40 * 1024 * 1024  # 40 MB
     chunks = []
 
-    styles = getSampleStyleSheet()
-    story = []
-    current_size = 0
+    width, height = A4
 
-    def save_pdf(story):
+    def new_canvas():
         fp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        doc = SimpleDocTemplate(fp.name, pagesize=A4)
-        doc.build(story)
-        return fp.name
+        c = canvas.Canvas(fp.name, pagesize=A4)
+        return fp.name, c
+
+    current_file, c = new_canvas()
 
     for title, data in movies.items():
         poster_url = data.get("meta", {}).get("poster")
 
-        # Add Title
-        story.append(Paragraph(f"<b>{title}</b>", styles['Title']))
-        story.append(Spacer(1, 12))
+        # --- Add Title ---
+        c.setFont("Helvetica-Bold", 18)
+        c.drawString(40, height - 50, title)
 
-        # Download and Add Image
+        # --- Add Poster ---
         if poster_url:
             try:
-                # FIX 1: Railway SSL issue → disable verification
-                response = requests.get(poster_url, timeout=20, verify=False)
+                img_data = requests.get(poster_url, timeout=20).content
+                img = ImageReader(BytesIO(img_data))
 
-                # Save image to temporary file
-                img_path = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg").name
-                with open(img_path, "wb") as f:
-                    f.write(response.content)
-                
-                # FIX 2: Resize image to fit A4 page
-                img = Image(img_path)
-                img._restrictSize(400, 500)  # auto resize image to fit the page
-                
-                # Add image to the PDF
-                story.append(img)
-                story.append(Spacer(1, 20))
+                img_width = width - 80
+                img_height = img_width * 1.5
 
-                current_size += len(response.content)
+                c.drawImage(
+                    img,
+                    40,
+                    height - 80 - img_height,
+                    width=img_width,
+                    height=img_height,
+                    preserveAspectRatio=True,
+                )
+            except:
+                c.setFont("Helvetica", 12)
+                c.drawString(40, height - 100, "⚠️ Poster failed to load")
+        else:
+            c.drawString(40, height - 100, "❌ No poster available")
 
-                # FIX 3: split into chunks
-                if current_size > MAX_SIZE_MB * 1024 * 1024:
-                    pdf_file = save_pdf(story)
-                    chunks.append(pdf_file)
+        c.showPage()
 
-                    story = []     # reset story
-                    current_size = 0  # reset size
+        # --- CHECK SIZE SAFELY ---
+        c.save()
 
-            except Exception as e:
-                # Add note if image failed
-                story.append(Paragraph(f"<i>Poster unavailable</i>", styles['Normal']))
-                story.append(Spacer(1, 20))
+        if os.path.getsize(current_file) > MAX_SIZE:
+            # close final chunk and start a new one
+            chunks.append(current_file)
+            current_file, c = new_canvas()
 
-        story.append(Spacer(1, 40))
-
-    # save final PDF
-    if story:
-        pdf_file = save_pdf(story)
-        chunks.append(pdf_file)
+    # save last PDF
+    c.save()
+    chunks.append(current_file)
 
     return chunks
 
