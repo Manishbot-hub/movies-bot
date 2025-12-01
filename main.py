@@ -354,6 +354,12 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 short_url = await asyncio.to_thread(_shorten_url_sync, link)
                 ref.child(safe_key).update({quality: short_url})
+                # Ensure date_added exists
+                meta_ref = ref.child(safe_key).child("meta")
+                existing_meta = meta_ref.get() or {}
+
+                if "date_added" not in existing_meta:
+                    meta_ref.update({"date_added": int(time.time())})
                 success_count += 1
             except Exception as e:
                 failed_count += 1
@@ -902,6 +908,24 @@ def create_movies_pdf_range(movies_slice, output_file):
     c.save()
 
 
+# ------------------ add below create_movies_pdf_range ------------------
+
+def get_movies_added_today():
+    """
+    Return a list of (title, data) for movies added in the last 24 hours,
+    preserving Firebase natural order (same as get_movies().items()).
+    """
+    movies = get_movies()  # dict in Firebase order
+    movie_list = list(movies.items())
+
+    now = int(time.time())
+    one_day = 86400  # seconds in 24 hours
+
+    today_movies = [
+        (title, data) for title, data in movie_list
+        if data.get("meta", {}).get("date_added", 0) > now - one_day
+    ]
+    return today_movies
 
 
 
@@ -1315,6 +1339,69 @@ async def getpdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
+# ------------------ add near other command handlers (below getpdf) ------------------
+
+async def getpdfrecent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Usage: /getpdfrecent 1-400
+    Generates a PDF containing only movies that were added in the last 24 hours,
+    sliced by the requested range.
+    """
+    if not context.args:
+        return await update.message.reply_text(
+            "⚠️ Please specify range of today's movies.\nExample: `/getpdfrecent 1-400`",
+            parse_mode="Markdown"
+        )
+
+    # Parse range
+    try:
+        rng = context.args[0]
+        start_str, end_str = rng.split("-")
+        start = int(start_str)
+        end = int(end_str)
+    except:
+        return await update.message.reply_text(
+            "❌ Invalid format.\nUse: `/getpdfrecent 1-400`",
+            parse_mode="Markdown"
+        )
+
+    # Get only today's movies (Firebase natural order)
+    today_movies = get_movies_added_today()
+    total = len(today_movies)
+
+    if total == 0:
+        return await update.message.reply_text("ℹ️ No movies were added in the last 24 hours.")
+
+    if start < 1 or end > total or start > end:
+        return await update.message.reply_text(
+            f"❌ Invalid range.\nThere are only *{total}* movies added today.",
+            parse_mode="Markdown"
+        )
+
+    # Slice and create PDF
+    movie_slice = today_movies[start-1 : end]
+
+    loading = await update.message.reply_text(f"⏳ Creating PDF for today's movies {start}-{end}...")
+    pdf_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+    create_movies_pdf_range(movie_slice, pdf_path)
+
+    await update.message.reply_document(
+        document=open(pdf_path, "rb"),
+        filename=f"today_{start}-{end}.pdf",
+        caption=f"📄 Movies added today ({start}-{end})"
+    )
+
+    try:
+        os.remove(pdf_path)
+    except:
+        pass
+
+    try:
+        await loading.delete()
+    except:
+        pass
+
+
 
 async def remove_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1452,6 +1539,7 @@ telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
 telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
 telegram_app.add_handler(CommandHandler("request", view_requests))
 telegram_app.add_handler(CommandHandler("getpdf", getpdf))
+telegram_app.add_handler(CommandHandler("getpdfrecent", getpdfrecent))
 telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
