@@ -247,11 +247,11 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
 
 async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    # ALLOW ONLY ADMIN
-    if user_id not in ADMINS:
-        return await update.message.reply_text("❌ You are not allowed to use this command.")
-
+    
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+        
+    
     # If user just typed /getfileid
     if update.message.text.startswith("/getfileid"):
         return await update.message.reply_text("📥 Now send the video you want the file_id for.")
