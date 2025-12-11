@@ -67,7 +67,6 @@ missing_posters_offset = {}
 POSTERS_PER_PAGE = 10
 missing_year_offset = {}
 MISSING_YEAR_PER_PAGE = 50
-GETFILEID_MODE = {}
 
 def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
@@ -167,12 +166,6 @@ def safe_callback_data(prefix: str, identifier: str) -> str:
 
 async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    # IGNORE non-text messages (important for /getfileid)
-    if not update.message or not update.message.text:
-        return
-
-    text = update.message.text.strip()
     
     # 🛡️ Rate-limit to avoid flood
     now = time.time()
@@ -253,19 +246,7 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
-async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
 
-    if user_id != ADMIN_ID:
-        return await update.message.reply_text("⛔ Not authorized.")
-
-    GETFILEID_MODE[user_id] = True
-
-    await update.message.reply_text(
-        "📥 Now send the *video/photo/document*.\n"
-        "I will reply with its file id.",
-        parse_mode="Markdown"
-    )
 
 async def send_temp_log(context, chat_id, text):
     msg = await context.bot.send_message(chat_id=chat_id, text=text)
@@ -323,33 +304,6 @@ def clean_firebase_key(name: str):
 
 
 
-async def capture_fileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    # Only capture file if admin requested /getfileid
-    if not GETFILEID_MODE.get(user_id):
-        return  # ignore
-
-    msg = update.message
-
-    file_obj = (
-        msg.document
-        or msg.video
-        or (msg.photo[-1] if msg.photo else None)
-    )
-
-    if not file_obj:
-        return await msg.reply_text("❌ Please send a valid file.")
-
-    file_id = file_obj.file_id
-
-    # Reset mode
-    GETFILEID_MODE[user_id] = False
-
-    await msg.reply_text(
-        f"✅ *File ID:*\n`{file_id}`",
-        parse_mode="Markdown"
-    )
 
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1597,10 +1551,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /admin
 """
     await update.message.reply_text(commands, parse_mode="Markdown")
-
-# -------------------- ADMIN FILE-ID TOOL --------------------
-telegram_app.add_handler(CommandHandler("getfileid", getfileid))
-telegram_app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO, capture_fileid))
 
 # -------------------- MOVIE MANAGEMENT COMMANDS --------------
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
