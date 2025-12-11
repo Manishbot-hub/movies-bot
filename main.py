@@ -1598,14 +1598,18 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(commands, parse_mode="Markdown")
 
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("addmovie", add_movie))
+# -------------------- ADMIN FILE-ID TOOL --------------------
+telegram_app.add_handler(CommandHandler("getfileid", getfileid))
+telegram_app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO, capture_fileid))
+
+# -------------------- MOVIE MANAGEMENT COMMANDS --------------
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
+telegram_app.add_handler(CommandHandler("addmovie", add_movie))
 telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
 telegram_app.add_handler(CommandHandler("request", view_requests))
 telegram_app.add_handler(CommandHandler("getpdf", getpdf))
 telegram_app.add_handler(CommandHandler("getpdfrecent", getpdfrecent))
-telegram_app.add_handler(CommandHandler("search", search_movie))  # Still works for /search
+telegram_app.add_handler(CommandHandler("search", search_movie))
 telegram_app.add_handler(CommandHandler("removemovie", remove_movie))
 telegram_app.add_handler(CommandHandler("scanposters", scan_posters))
 telegram_app.add_handler(CommandHandler("missingyear", list_missing_year))
@@ -1613,16 +1617,16 @@ telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
 telegram_app.add_handler(CommandHandler("fixposter", fixposter_command))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
-telegram_app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO,capture_fileid))
-telegram_app.add_handler(CommandHandler("getfileid", getfileid))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(CommandHandler("stats", show_user_stats))
-telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
+telegram_app.add_handler(CommandHandler("start", start))
+
+# -------------------- CALLBACK HANDLER -----------------------
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
-# ✅ Handles both title edit and general text search
+# -------------------- TEXT SEARCH (MUST BE LAST) --------------
 telegram_app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_title_or_search))
 
 
