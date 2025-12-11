@@ -1476,7 +1476,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "how_to_download":
         # Replace this with your real Telegram file_id
-        TUTORIAL_VIDEO = "YOUR_VIDEO_FILE_ID_HERE"
+        TUTORIAL_VIDEO = "BAACAgUAAxkBAAMGaTokaQwa7apOQs97gykhuSCMz5oAAkccAAKOU9FViLGUl_o5Bf42BA"
 
         await query.message.reply_video(
             video=TUTORIAL_VIDEO,
