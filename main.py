@@ -245,7 +245,23 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
+async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
+    # ALLOW ONLY ADMIN
+    if user_id not in ADMINS:
+        return await update.message.reply_text("❌ You are not allowed to use this command.")
+
+    # If user just typed /getfileid
+    if update.message.text.startswith("/getfileid"):
+        return await update.message.reply_text("📥 Now send the video you want the file_id for.")
+
+    # If user sends a video
+    if update.message.video:
+        file_id = update.message.video.file_id
+        return await update.message.reply_text(f"🎬 *Video file_id:*\n`{file_id}`", parse_mode="Markdown")
+
+    return await update.message.reply_text("❗ Please send a video after /getfileid.")
 
 
 async def send_temp_log(context, chat_id, text):
@@ -1565,6 +1581,8 @@ telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
 telegram_app.add_handler(CommandHandler("fixposter", fixposter_command))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
+telegram_app.add_handler(MessageHandler(filters.VIDEO, getfileid))
+telegram_app.add_handler(CommandHandler("getfileid", getfileid))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
