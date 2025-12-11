@@ -47,6 +47,7 @@ TMDB_TOKEN = os.getenv("TMDB_TOKEN", "")  # put your TMDB v4 token in Railway en
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
+
 if not firebase_admin._apps:
     cred = credentials.Certificate(FIREBASE_KEY)
     firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_URL})
@@ -66,6 +67,7 @@ missing_posters_offset = {}
 POSTERS_PER_PAGE = 10
 missing_year_offset = {}
 MISSING_YEAR_PER_PAGE = 50
+GETFILEID_MODE = {}
 
 def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
@@ -246,31 +248,16 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin-only: returns file_id of any document/video/photo sent."""
-    
-    # Check admin
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id
+
+    if user_id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    if not update.message or not (
-        update.message.document or update.message.video or update.message.photo
-    ):
-        return await update.message.reply_text(
-            "📥 Send a file *after* typing /getfileid.\nSupported: Document, Video, Photo.",
-            parse_mode="Markdown"
-        )
-
-    # Detect file type
-    file_obj = (
-        update.message.document
-        or update.message.video
-        or update.message.photo[-1]  # best quality for photos
-    )
-
-    file_id = file_obj.file_id
+    GETFILEID_MODE[user_id] = True
 
     await update.message.reply_text(
-        f"✅ *File ID:*\n`{file_id}`",
+        "📥 Now send the *video/photo/document*.\n"
+        "I will reply with its file_id.",
         parse_mode="Markdown"
     )
 
@@ -328,6 +315,35 @@ def clean_firebase_key(name: str):
     name = " ".join(name.split())  # remove extra spaces
     return name
 
+
+
+async def capture_fileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # Only capture file if admin requested /getfileid
+    if not GETFILEID_MODE.get(user_id):
+        return  # ignore
+
+    msg = update.message
+
+    file_obj = (
+        msg.document
+        or msg.video
+        or (msg.photo[-1] if msg.photo else None)
+    )
+
+    if not file_obj:
+        return await msg.reply_text("❌ Please send a valid file.")
+
+    file_id = file_obj.file_id
+
+    # Reset mode
+    GETFILEID_MODE[user_id] = False
+
+    await msg.reply_text(
+        f"✅ *File ID:*\n`{file_id}`",
+        parse_mode="Markdown"
+    )
 
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1592,6 +1608,7 @@ telegram_app.add_handler(CommandHandler("fixposter", fixposter_command))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
 telegram_app.add_handler(CommandHandler("getfileid", getfileid))
+telegram_app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO,capture_fileid))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
