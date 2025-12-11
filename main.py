@@ -128,25 +128,30 @@ async def delete_last(user_id, context):
         except:
             pass
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await delete_last(update.effective_user.id, context)
-
     user = update.effective_user
-    user_id = str(user.id)
 
-    try:
-        user_ref = db.reference("Users").child(user_id)
-        if not user_ref.get():
-            user_ref.set({
-                "first_name": user.first_name,
-                "username": user.username,
-                "joined": datetime.utcnow().isoformat()
-            })
-    except Exception as e:
-        logging.warning(f"❌ Failed to save user: {e}")
+    # Delete previous bot messages (your existing behavior)
+    await delete_last(user.id, context)
 
-    text = "\U0001F44B Welcome to Movies World! Type any movie name to get your favourite movies🎦,/movies to browse and /requestmovie to request a movie"
-    msg = await update.message.reply_text(text)
+    text = (
+        "👋 *Welcome to Movies World!*\n\n"
+        "🎦 Type any movie name to get your favourite movies.\n"
+        "📂 Use /movies to browse the full collection.\n"
+        "🎫 Use /requestmovie to request a movie.\n\n"
+        "👇 Choose an option:"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎥 How to Download Movies", callback_data="how_to_download")]
+    ])
+
+    msg = await update.message.reply_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
     user_last_bot_message[user.id] = msg.message_id
 
 
@@ -1451,6 +1456,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Example: 'Wrong link', '404 not found', 'GDToT page blank', etc.",
             parse_mode="Markdown"
        )
+
+
+    elif query.data == "how_to_download":
+        # Replace this with your real Telegram file_id
+        TUTORIAL_VIDEO = "YOUR_VIDEO_FILE_ID_HERE"
+
+        await query.message.reply_video(
+            video=TUTORIAL_VIDEO,
+            caption="📹 Here's how to download movies step-by-step!"
+        )
+        await query.answer()
+        return
 
     elif query.data.startswith("fixposter|"):
         title = query.data.split("|", 1)[1]
