@@ -263,7 +263,7 @@ async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "📥 Now send the *video/photo/document*.\n"
-        "I will reply with its file_id.",
+        "I will reply with its file id.",
         parse_mode="Markdown"
     )
 
