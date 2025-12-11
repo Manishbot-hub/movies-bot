@@ -246,23 +246,33 @@ async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    """Admin-only: returns file_id of any document/video/photo sent."""
     
+    # Check admin
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
-        
-    
-    # If user just typed /getfileid
-    if update.message.text.startswith("/getfileid"):
-        return await update.message.reply_text("📥 Now send the video you want the file_id for.")
 
-    # If user sends a video
-    if update.message.video:
-        file_id = update.message.video.file_id
-        return await update.message.reply_text(f"🎬 *Video file_id:*\n`{file_id}`", parse_mode="Markdown")
+    if not update.message or not (
+        update.message.document or update.message.video or update.message.photo
+    ):
+        return await update.message.reply_text(
+            "📥 Send a file *after* typing /getfileid.\nSupported: Document, Video, Photo.",
+            parse_mode="Markdown"
+        )
 
-    return await update.message.reply_text("❗ Please send a video after /getfileid.")
+    # Detect file type
+    file_obj = (
+        update.message.document
+        or update.message.video
+        or update.message.photo[-1]  # best quality for photos
+    )
 
+    file_id = file_obj.file_id
+
+    await update.message.reply_text(
+        f"✅ *File ID:*\n`{file_id}`",
+        parse_mode="Markdown"
+    )
 
 async def send_temp_log(context, chat_id, text):
     msg = await context.bot.send_message(chat_id=chat_id, text=text)
@@ -1581,7 +1591,6 @@ telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
 telegram_app.add_handler(CommandHandler("fixposter", fixposter_command))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
-telegram_app.add_handler(MessageHandler(filters.VIDEO, getfileid))
 telegram_app.add_handler(CommandHandler("getfileid", getfileid))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
