@@ -168,6 +168,12 @@ def safe_callback_data(prefix: str, identifier: str) -> str:
 async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
+    # IGNORE non-text messages (important for /getfileid)
+    if not update.message or not update.message.text:
+        return
+
+    text = update.message.text.strip()
+    
     # 🛡️ Rate-limit to avoid flood
     now = time.time()
     if user_id in last_user_message_time:
@@ -1607,8 +1613,8 @@ telegram_app.add_handler(CommandHandler("missingposters", missing_posters))
 telegram_app.add_handler(CommandHandler("fixposter", fixposter_command))
 telegram_app.add_handler(CommandHandler("admin", admin_panel))
 telegram_app.add_handler(CommandHandler("movies", list_movies))
-telegram_app.add_handler(CommandHandler("getfileid", getfileid))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO,capture_fileid))
+telegram_app.add_handler(CommandHandler("getfileid", getfileid))
 telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
