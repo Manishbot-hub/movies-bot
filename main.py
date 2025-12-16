@@ -68,6 +68,47 @@ POSTERS_PER_PAGE = 10
 missing_year_offset = {}
 MISSING_YEAR_PER_PAGE = 50
 
+
+
+
+def save_user_if_not_exists(update, context):
+    """
+    Save Telegram user info under Users/{user_id}
+    ONLY if the user does not already exist.
+    """
+    user = update.effective_user
+    if not user:
+        return
+
+    user_id = str(user.id)
+
+    user_ref = db.reference("Users").child(user_id)
+    existing = user_ref.get()
+
+    if existing:
+        # User already exists → do nothing
+        return
+
+    user_data = {
+        "user_id": user.id,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "joined_at": datetime.utcnow().isoformat()
+    }
+
+    user_ref.set(user_data)
+
+
+def ensure_user_saved(update, context):
+    """
+    Safe wrapper so user saving never breaks handlers.
+    """
+    try:
+        save_user_if_not_exists(update, context)
+    except Exception:
+        pass
+
 def clean_firebase_key(key: str) -> str:
     """Sanitize Firebase keys by replacing disallowed characters."""
     return re.sub(r'[.#$/\[\]]', '_', key)
@@ -132,6 +173,7 @@ async def delete_last(user_id, context):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    ensure_user_saved(update, context)
 
     # Delete previous bot messages (your existing behavior)
     await delete_last(user.id, context)
@@ -166,6 +208,7 @@ def safe_callback_data(prefix: str, identifier: str) -> str:
 
 async def handle_title_or_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    ensure_user_saved(update, context)
     
     # 🛡️ Rate-limit to avoid flood
     now = time.time()
@@ -1129,6 +1172,7 @@ async def ensure_poster_for_movie(key: str, force: bool = False):
             continue
 
 async def search_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ensure_user_saved(update, context)
     if "edit_title_old" in context.user_data:
         return  # user editing title, skip search
 
