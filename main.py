@@ -304,6 +304,42 @@ def clean_firebase_key(name: str):
 
 
 
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Admin check
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    if not context.args:
+        return await update.message.reply_text(
+            "Usage:\n/broadcast Your message here"
+        )
+
+    message = " ".join(context.args)
+
+    users = db.reference("Users").get()
+    if not users:
+        return await update.message.reply_text("❌ No users found.")
+
+    sent = 0
+    failed = 0
+
+    status = await update.message.reply_text("📤 Broadcasting message...")
+
+    for user_id in users.keys():
+        try:
+            await context.bot.send_message(
+                chat_id=int(user_id),
+                text=message
+            )
+            sent += 1
+        except Exception:
+            failed += 1
+
+    await status.edit_text(
+        f"✅ Broadcast completed!\n\n"
+        f"📨 Sent: {sent}\n"
+        f"❌ Failed: {failed}"
+    )
 
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1571,6 +1607,7 @@ telegram_app.add_handler(CommandHandler("edittitle", edittitle_command))
 telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(CommandHandler("stats", show_user_stats))
+telegram_app.add_handler(CommandHandler("broadcast", broadcast))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
