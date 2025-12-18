@@ -41,7 +41,7 @@ logging.basicConfig(
 TOKEN = os.getenv("BOT_TOKEN")
 FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
-SHRINKME_API = os.getenv("SHRINKME_API")
+LINKPAY_API = os.getenv("LINKPAY_API")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 TMDB_TOKEN = os.getenv("TMDB_TOKEN", "")  # put your TMDB v4 token in Railway env
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
@@ -114,43 +114,52 @@ def clean_firebase_key(key: str) -> str:
     return re.sub(r'[.#$/\[\]]', '_', key)
 
 
-def _shorten_url_sync(link: str) -> str:
-    """Synchronously call ShrinkMe.io to shorten a link."""
-    API_KEY = os.getenv("SHRINKME_API")  # <-- NEW env var name
+def _linkpay_shorten_url_sync(link: str) -> str:
+    """Synchronously call LinkPay to shorten a link."""
+    API_KEY = os.getenv("LINKPAY_API")  # <-- Railway env var
     if not API_KEY:
-        logging.error("❌ SHRINKME_API missing in Railway variables!")
+        logging.error("❌ LINKPAY_API missing in Railway variables!")
         return link  # fallback if no API key found
 
-    url = f"https://shrinkme.io/api?api={API_KEY}&url={link}"
-    logging.info(f"ShrinkMe shortener called: {url}")
+    url = "https://linkpays.in/api"
+    params = {
+        "api": API_KEY,
+        "url": link
+    }
+
+    logging.info(f"LinkPay shortener called: {url} | params={params}")
 
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
 
         try:
             data = resp.json()
-            logging.info(f"ShrinkMe response: {data}")
+            logging.info(f"LinkPay response: {data}")
 
-            # ShrinkMe success response example:
-            # {"status":"success","shortenedUrl":"https://shrinkme.io/xxxxx"}
+            # LinkPay success response examples may be:
+            # {"status":"success","shortenedUrl":"https://linkpays.in/xxxxx"}
+            # OR
+            # {"shortUrl":"https://linkpays.in/xxxxx"}
 
-            if data.get("status") == "success" and data.get("shortenedUrl"):
+            if data.get("shortenedUrl"):
                 return data["shortenedUrl"]
 
+            if data.get("shortUrl"):
+                return data["shortUrl"]
+
         except json.JSONDecodeError:
-            logging.warning(f"Invalid JSON from ShrinkMe.io: {resp.text}")
+            logging.warning(f"Invalid JSON from LinkPay: {resp.text}")
 
     except Exception as e:
-        logging.error(f"ShrinkMe.io shortener request failed: {e}")
+        logging.error(f"LinkPay shortener request failed: {e}")
 
     return link  # fallback (send long link)
 
 
-async def shorten_link(link: str) -> str:
+async def linkpay_shorten_link(link: str) -> str:
     """Async wrapper: runs the sync function in a thread."""
-    return await asyncio.to_thread(_shorten_url_sync, link)
-
+    return await asyncio.to_thread(_linkpay_shorten_url_sync, link)
 
 def get_movies():
     return ref.get() or {}
@@ -384,6 +393,59 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"❌ Failed: {failed}"
     )
 
+
+
+async def replace_shrinkme_with_linkpay(update, context):
+    # Admin only
+    if update.effective_user.id != ADMIN_ID:
+        return await update.message.reply_text("⛔ Not authorized.")
+
+    if not update.message.document:
+        return await update.message.reply_text(
+            "📄 Send the .txt file with ORIGINAL links."
+        )
+
+    file = await update.message.document.get_file()
+    content = (await file.download_as_bytearray()).decode("utf-8", errors="ignore")
+
+    movies_ref = db.reference("movies")
+    movies = movies_ref.get() or {}
+
+    replaced = 0
+    skipped = 0
+
+    for line in content.splitlines():
+        if not line.strip():
+            continue
+
+        parts = [p.strip() for p in line.split("  ") if p.strip()]
+        if len(parts) < 3:
+            skipped += 1
+            continue
+
+        title, quality, original_link = parts[0], parts[1], parts[2]
+        safe_title = clean_firebase_key(title)
+
+        movie = movies.get(safe_title)
+        if not movie or quality not in movie:
+            skipped += 1
+            continue
+
+        try:
+            new_link = linkpay_short(original_link)
+        except Exception:
+            skipped += 1
+            continue
+
+        # 🔁 REPLACE ShrinkMe link with LinkPay
+        movies_ref.child(safe_title).child(quality).set(new_link)
+        replaced += 1
+
+    await update.message.reply_text(
+        f"✅ Replacement completed.\n\n"
+        f"🔁 Replaced: {replaced}\n"
+        f"⏭ Skipped: {skipped}"
+    )
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -1652,6 +1714,8 @@ telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(CommandHandler("stats", show_user_stats))
 telegram_app.add_handler(CommandHandler("broadcast", broadcast))
+telegram_app.add_handler(CommandHandler("replaceshrinkme", replace_shrinkme_with_linkpay))
+telegram_app.add_handler(MessageHandler(filters.Document.ALL, replace_shrinkme_with_linkpay))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
