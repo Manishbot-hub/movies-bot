@@ -395,57 +395,91 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-async def replace_shrinkme_with_linkpay(update, context):
-    # Admin only
+async def replaceshrinkme(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return await update.message.reply_text("⛔ Not authorized.")
 
-    if not update.message.document:
+    lock_ref = db.reference(REPLACE_SHRINKME_LOCK)
+
+    # 🔒 Prevent running twice
+    if lock_ref.get() is True:
         return await update.message.reply_text(
-            "📄 Send the .txt file with ORIGINAL links."
+            "⚠️ ShrinkMe replacement already completed.\n"
+            "This command is locked to prevent data corruption."
         )
 
-    file = await update.message.document.get_file()
-    content = (await file.download_as_bytearray()).decode("utf-8", errors="ignore")
+    if not update.message.document or not update.message.document.file_name.lower().endswith(".txt"):
+        return await update.message.reply_text(
+            "📄 Send the .txt file containing ORIGINAL links."
+        )
 
-    movies_ref = db.reference("movies")
-    movies = movies_ref.get() or {}
+    file_obj = await update.message.document.get_file()
+    content = await file_obj.download_as_bytearray()
+    text = content.decode("utf-8", errors="ignore")
 
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    total_lines = len(lines)
+
+    await update.message.reply_text(
+        f"📄 Received .txt file with {total_lines} lines.\n"
+        f"🔁 Starting ShrinkMe → LinkPay replacement..."
+    )
+
+    movies = get_movies()
     replaced = 0
     skipped = 0
+    invalid = 0
 
-    for line in content.splitlines():
-        if not line.strip():
+    for idx, line in enumerate(lines, start=1):
+        parts = line.split()
+
+        # SAME parsing logic as upload_bulk
+        if len(parts) < 3 or not parts[-1].startswith("http"):
+            invalid += 1
             continue
 
-        parts = [p.strip() for p in line.split("  ") if p.strip()]
-        if len(parts) < 3:
-            skipped += 1
+        quality = parts[-2].lower()
+        if not quality.endswith("p"):
+            invalid += 1
             continue
 
-        title, quality, original_link = parts[0], parts[1], parts[2]
-        safe_title = clean_firebase_key(title)
+        title = " ".join(parts[:-2])
+        original_link = parts[-1]
 
-        movie = movies.get(safe_title)
-        if not movie or quality not in movie:
+        existing_key = find_existing_title_case_insensitive(title, movies)
+        safe_key = clean_firebase_key(existing_key if existing_key else title)
+        movie = movies.get(safe_key, {})
+
+        # Only replace if quality exists
+        if quality not in movie:
             skipped += 1
             continue
 
         try:
-            new_link = linkpay_short(original_link)
-        except Exception:
+            new_short = await linkpay_shorten_link(original_link)
+            ref.child(safe_key).update({quality: new_short})
+            replaced += 1
+        except Exception as e:
+            logging.error(f"Replacement failed for {title} {quality}: {e}")
             skipped += 1
             continue
 
-        # 🔁 REPLACE ShrinkMe link with LinkPay
-        movies_ref.child(safe_title).child(quality).set(new_link)
-        replaced += 1
+        if idx % 10 == 0 or idx == total_lines:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"🔁 Replacing links: {idx}/{total_lines}"
+            )
+            await asyncio.sleep(0.3)
+
+    # 🔒 Lock after successful run
+    lock_ref.set(True)
 
     await update.message.reply_text(
-        f"✅ Replacement completed.\n\n"
+        f"✅ ShrinkMe replacement completed!\n\n"
         f"🔁 Replaced: {replaced}\n"
-        f"⏭ Skipped: {skipped}"
-    )
+        f"⏭ Skipped: {skipped}\n"
+        f"❌ Invalid lines: {invalid}"
+        )
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
