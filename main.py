@@ -46,6 +46,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 TMDB_TOKEN = os.getenv("TMDB_TOKEN", "")  # put your TMDB v4 token in Railway env
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
+REPLACE_SHRINKME_LOCK = "settings/shrinkme_replaced"
 
 
 if not firebase_admin._apps:
