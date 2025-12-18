@@ -396,91 +396,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-async def replaceshrinkme(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return await update.message.reply_text("⛔ Not authorized.")
 
-    lock_ref = db.reference(REPLACE_SHRINKME_LOCK)
-
-    # 🔒 Prevent running twice
-    if lock_ref.get() is True:
-        return await update.message.reply_text(
-            "⚠️ ShrinkMe replacement already completed.\n"
-            "This command is locked to prevent data corruption."
-        )
-
-    if not update.message.document or not update.message.document.file_name.lower().endswith(".txt"):
-        return await update.message.reply_text(
-            "📄 Send the .txt file containing ORIGINAL links."
-        )
-
-    file_obj = await update.message.document.get_file()
-    content = await file_obj.download_as_bytearray()
-    text = content.decode("utf-8", errors="ignore")
-
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    total_lines = len(lines)
-
-    await update.message.reply_text(
-        f"📄 Received .txt file with {total_lines} lines.\n"
-        f"🔁 Starting ShrinkMe → LinkPay replacement..."
-    )
-
-    movies = get_movies()
-    replaced = 0
-    skipped = 0
-    invalid = 0
-
-    for idx, line in enumerate(lines, start=1):
-        parts = line.split()
-
-        # SAME parsing logic as upload_bulk
-        if len(parts) < 3 or not parts[-1].startswith("http"):
-            invalid += 1
-            continue
-
-        quality = parts[-2].lower()
-        if not quality.endswith("p"):
-            invalid += 1
-            continue
-
-        title = " ".join(parts[:-2])
-        original_link = parts[-1]
-
-        existing_key = find_existing_title_case_insensitive(title, movies)
-        safe_key = clean_firebase_key(existing_key if existing_key else title)
-        movie = movies.get(safe_key, {})
-
-        # Only replace if quality exists
-        if quality not in movie:
-            skipped += 1
-            continue
-
-        try:
-            new_short = await linkpay_shorten_link(original_link)
-            ref.child(safe_key).update({quality: new_short})
-            replaced += 1
-        except Exception as e:
-            logging.error(f"Replacement failed for {title} {quality}: {e}")
-            skipped += 1
-            continue
-
-        if idx % 10 == 0 or idx == total_lines:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"🔁 Replacing links: {idx}/{total_lines}"
-            )
-            await asyncio.sleep(0.3)
-
-    # 🔒 Lock after successful run
-    lock_ref.set(True)
-
-    await update.message.reply_text(
-        f"✅ ShrinkMe replacement completed!\n\n"
-        f"🔁 Replaced: {replaced}\n"
-        f"⏭ Skipped: {skipped}\n"
-        f"❌ Invalid lines: {invalid}"
-        )
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -1749,8 +1665,6 @@ telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(CommandHandler("stats", show_user_stats))
 telegram_app.add_handler(CommandHandler("broadcast", broadcast))
-telegram_app.add_handler(CommandHandler("replaceshrinkme", replaceshrinkme))
-telegram_app.add_handler(MessageHandler(filters.Document.ALL, replaceshrinkme))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
