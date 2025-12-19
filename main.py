@@ -46,8 +46,6 @@ ADMIN_ID = int(os.getenv("ADMIN_ID"))
 TMDB_TOKEN = os.getenv("TMDB_TOKEN", "")  # put your TMDB v4 token in Railway env
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
-REPLACE_SHRINKME_LOCK = "settings/shrinkme_replaced"
-WAITING_FOR_REPLACE_FILE = "waiting_replace_file"
 
 
 if not firebase_admin._apps:
@@ -397,102 +395,8 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-async def replaceshrinkme(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return await update.message.reply_text("⛔ Not authorized.")
-
-    lock_ref = db.reference("settings/shrinkme_replaced")
-
-    if lock_ref.get() is True:
-        return await update.message.reply_text(
-            "⚠️ ShrinkMe → LinkPay replacement already completed."
-        )
-
-    context.user_data[WAITING_FOR_REPLACE_FILE] = True
-
-    await update.message.reply_text(
-        "📄 Please send the `.txt` file containing ORIGINAL links.\n"
-        "⚠️ Send only ONE file."
-    )
 
 
-async def replaceshrinkme_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    if not context.user_data.get(WAITING_FOR_REPLACE_FILE):
-        return  # ignore unrelated files
-
-    context.user_data[WAITING_FOR_REPLACE_FILE] = False
-
-    lock_ref = db.reference("settings/shrinkme_replaced")
-
-    if lock_ref.get() is True:
-        return await update.message.reply_text("⚠️ Replacement already done.")
-
-    doc = update.message.document
-    if not doc or not doc.file_name.lower().endswith(".txt"):
-        return await update.message.reply_text("❌ Please send a valid .txt file.")
-
-    file_obj = await doc.get_file()
-    content = await file_obj.download_as_bytearray()
-    text = content.decode("utf-8", errors="ignore")
-
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    total = len(lines)
-
-    await update.message.reply_text(
-        f"📄 Received .txt file with {total} lines.\n"
-        "🔁 Starting ShrinkMe → LinkPay replacement..."
-    )
-
-    movies = get_movies()
-    replaced = skipped = invalid = 0
-
-    for idx, line in enumerate(lines, start=1):
-        parts = line.split()
-        if len(parts) < 3 or not parts[-1].startswith("http"):
-            invalid += 1
-            continue
-
-        quality = parts[-2].lower()
-        if not quality.endswith("p"):
-            invalid += 1
-            continue
-
-        title = " ".join(parts[:-2])
-        original_link = parts[-1]
-
-        existing_key = find_existing_title_case_insensitive(title, movies)
-        safe_key = clean_firebase_key(existing_key if existing_key else title)
-        movie = movies.get(safe_key, {})
-
-        if quality not in movie:
-            skipped += 1
-            continue
-
-        try:
-            new_short = await linkpay_shorten_link(original_link)
-            ref.child(safe_key).update({quality: new_short})
-            replaced += 1
-        except:
-            skipped += 1
-
-        if idx % 10 == 0 or idx == total:
-            await context.bot.send_message(
-                update.effective_chat.id,
-                f"🔁 Replacing links: {idx}/{total}"
-            )
-            await asyncio.sleep(0.2)
-
-    lock_ref.set(True)
-
-    await update.message.reply_text(
-        f"✅ Replacement completed!\n\n"
-        f"🔁 Replaced: {replaced}\n"
-        f"⏭ Skipped: {skipped}\n"
-        f"❌ Invalid: {invalid}"
-    )
 
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -1761,8 +1665,6 @@ telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(CommandHandler("stats", show_user_stats))
 telegram_app.add_handler(CommandHandler("broadcast", broadcast))
-telegram_app.add_handler(CommandHandler("replaceshrinkme", replaceshrinkme))
-telegram_app.add_handler(MessageHandler(filters.Document.ALL, replaceshrinkme_file))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
