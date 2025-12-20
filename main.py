@@ -9,6 +9,7 @@ import asyncio
 import logging
 import firebase_admin
 import urllib3
+import sys
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -34,10 +35,16 @@ from telegram.ext import (
     filters,
 )
 
+
+import sys
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
+
+logger = logging.getLogger(__name__)
 TOKEN = os.getenv("BOT_TOKEN")
 FIREBASE_URL = os.getenv("FIREBASE_URL")
 FIREBASE_KEY = json.loads(os.getenv("FIREBASE_KEY"))
