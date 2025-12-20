@@ -398,18 +398,24 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
 async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
+        logger.warning("UNAUTHORIZED USER ATTEMPTED /uploadbulk")
         return await update.message.reply_text("⛔ Not authorized.")
 
     if context.bot_data.get("upload_running", False):
+        logger.warning("UPLOAD ALREADY RUNNING")
         return await update.message.reply_text("⚠️ Upload already in progress. Try again later.")
     context.bot_data["upload_running"] = True
 
     try:
         doc = update.message.document
         if not doc or not doc.file_name.lower().endswith('.txt'):
-            return await update.message.reply_text("⚠️ Please send a valid .txt file after /uploadbulk.")
+            logger.warning("INVALID FILE SENT (not .txt)")
+            return await update.message.reply_text(
+                "⚠️ Please send a valid .txt file after /uploadbulk."
+            )
 
         file_obj = await doc.get_file()
         content = await file_obj.download_as_bytearray()
@@ -418,7 +424,12 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = text.strip().splitlines()
         total_lines = len(lines)
 
-        await update.message.reply_text(f"📄 Received `.txt` file with {total_lines} lines.\n⏳ Starting upload...", parse_mode="Markdown")
+        logger.info(f"UPLOAD STARTED | TOTAL LINES = {total_lines}")
+
+        await update.message.reply_text(
+            f"📄 Received `.txt` file with {total_lines} lines.\n⏳ Starting upload...",
+            parse_mode="Markdown"
+        )
 
         # Load existing movies once
         movies = get_movies()
@@ -430,8 +441,11 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for idx, line in enumerate(lines, start=1):
             line = line.strip()
+
             if not line:
                 continue
+
+            logger.info(f"LINE {idx} | RAW: {line}")
 
             parts = line.split()
             if len(parts) >= 3 and parts[-2].endswith("p") and parts[-1].startswith("http"):
@@ -440,6 +454,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 link = parts[-1]
             else:
                 invalid_count += 1
+                logger.warning(f"INVALID LINE {idx} | {line}")
                 continue
 
             existing_key = find_existing_title_case_insensitive(title, movies)
@@ -448,24 +463,36 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if quality in movie:
                 exists_count += 1
+                logger.info(f"SKIPPED (EXISTS) | {safe_key} | {quality}")
                 continue
 
             try:
                 short_url = await asyncio.to_thread(_shorten_url_sync, link)
                 ref.child(safe_key).update({quality: short_url})
+
                 # Ensure date_added exists
                 meta_ref = ref.child(safe_key).child("meta")
                 existing_meta = meta_ref.get() or {}
 
                 if "date_added" not in existing_meta:
                     meta_ref.update({"date_added": int(time.time())})
+
+                # 🔥 IMPORTANT: update in-memory cache to prevent false FAILED
+                movies.setdefault(safe_key, {})[quality] = short_url
+
                 success_count += 1
+                logger.info(f"UPLOADED | {safe_key} | {quality}")
+
             except Exception as e:
                 failed_count += 1
+                logger.error(
+                    f"FAILED LINE {idx} | {safe_key} | {quality} | ERROR: {repr(e)}"
+                )
                 continue
 
-            # Show progress every 10 movies
+            # Progress log
             if idx % 10 == 0 or idx == total_lines:
+                logger.info(f"PROGRESS {idx}/{total_lines}")
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text=f"⏳ Processing movies: `{idx}/{total_lines}`",
@@ -473,7 +500,12 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 await asyncio.sleep(0.3)
 
-        # Final summary
+        logger.info(
+            f"UPLOAD FINISHED | Total={total_lines} | "
+            f"Success={success_count} | Exists={exists_count} | "
+            f"Failed={failed_count} | Invalid={invalid_count}"
+        )
+
         summary = (
             f"✅ *Upload Complete!*\n"
             f"• Total: {total_lines}\n"
@@ -482,14 +514,19 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• Failed: {failed_count}\n"
             f"• Invalid Lines: {invalid_count}"
         )
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=summary, parse_mode="Markdown")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=summary,
+            parse_mode="Markdown"
+        )
 
     except Exception as e:
-        logging.error(f"❌ Unexpected error: {e}")
+        logger.exception("UNEXPECTED ERROR DURING UPLOAD")
         await update.message.reply_text("❌ Something went wrong during upload.")
+
     finally:
         context.bot_data["upload_running"] = False
-
+        logger.info("UPLOAD FLAG RESET")
 
 
 
