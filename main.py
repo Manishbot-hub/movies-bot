@@ -830,8 +830,7 @@ async def show_missing_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     end = offset + POSTERS_PER_PAGE
     current_page = missing[offset:end]
 
-    keyboard = [
-        [InlineKeyboardButton(t.replace("_", " "), callback_data=f"fixposter|{t}")]
+    keyboard = [[InlineKeyboardButton(t.replace("_", " "),callback_data=safe_callback_data("fixposter", t))]
         for t in current_page
     ]
 
