@@ -474,7 +474,7 @@ async def upload_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 continue
 
             try:
-                short_url = await asyncio.to_thread(_shorten_url_sync, link)
+                short_url = await asyncio.to_thread(_linkpay_shorten_url_sync, link)
                 ref.child(safe_key).update({quality: short_url})
 
                 # Ensure date_added exists
@@ -570,7 +570,7 @@ async def add_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⚠️ Skipped: {title}  {quality} already exists")
 
     try:
-        short_url = await asyncio.to_thread(_shorten_url_sync, link)
+        short_url = await asyncio.to_thread(_linkpay_shorten_url_sync, link)
         ref.child(safe_key).update({quality: short_url})
         return await send_temp_log(context, update.effective_chat.id,
             f"✅ Added: {title}  {quality}  {short_url}")
