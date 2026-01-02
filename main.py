@@ -74,6 +74,7 @@ missing_posters_offset = {}
 POSTERS_PER_PAGE = 10
 missing_year_offset = {}
 MISSING_YEAR_PER_PAGE = 50
+GETFILEID_MODE = {}
 
 
 
