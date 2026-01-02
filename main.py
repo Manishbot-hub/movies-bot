@@ -402,45 +402,9 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def getfileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id != ADMIN_ID:
-        return await update.message.reply_text("Not authorized.")
-
-    # ALWAYS reset before starting
-    GETFILEID_MODE[user_id] = True
-
-    await update.message.reply_text(
-        "Send the file now.\nI will reply with its file ID.",
-        parse_mode=None
-    )
 
 
-async def capture_fileid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
 
-    # Only act if getfileid mode is ON
-    if GETFILEID_MODE.get(user_id):
-        msg = update.message
-
-        file_obj = (
-            msg.document
-            or msg.video
-            or (msg.photo[-1] if msg.photo else None)
-        )
-
-        if not file_obj:
-            return  # Let uploadbulk handle anything else
-
-        file_id = file_obj.file_id
-        GETFILEID_MODE[user_id] = False
-
-        await msg.reply_text(f"File ID:\n{file_id}", parse_mode=None)
-        return  # <-- Only stop if file_id mode ON
-
-    # OTHERWISE LET OTHER HANDLERS CONTINUE
-    return  # DO NOT BLOCK upload_bulk
 
 
 
@@ -1639,7 +1603,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "how_to_download":
         # Replace this with your real Telegram file_id
-        TUTORIAL_VIDEO = "BAACAgUAAxkBAAMNaVFSghUgfrBMeLC7Ou0cJzWym00AAtMeAAJ0IohWdhYEyH0oy3g2BA"
+        TUTORIAL_VIDEO = "BAACAgUAAxkBAAI0umlXNriiLqkrBv0rvS-37akO_o2HAALYIQACJaa4VkjoMpIvNIBWOAQ"
 
         await query.message.reply_video(
             video=TUTORIAL_VIDEO,
@@ -1731,7 +1695,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("addmovie", add_movie))
-telegram_app.add_handler(CommandHandler("getfileid", getfileid))
 telegram_app.add_handler(CommandHandler("uploadbulk", upload_bulk))
 telegram_app.add_handler(CommandHandler("requestmovie", request_movie))
 telegram_app.add_handler(CommandHandler("request", view_requests))
@@ -1750,8 +1713,6 @@ telegram_app.add_handler(CommandHandler("cleantitles", clean_titles))
 telegram_app.add_handler(CommandHandler("removeall", remove_all_movies))
 telegram_app.add_handler(CommandHandler("stats", show_user_stats))
 telegram_app.add_handler(CommandHandler("broadcast", broadcast))
-# File-id handler FIRST but non-blocking
-telegram_app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO, capture_fileid))
 telegram_app.add_handler(MessageHandler(filters.Document.ALL, upload_bulk))
 telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
